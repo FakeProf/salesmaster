@@ -17,9 +17,6 @@
     "start": "npm --workspace backend run start",
     "install:all": "npm install && npm --workspace frontend install && npm --workspace backend install"
   },
-  "devDependencies": {
-    "concurrently": "^8.2.2"
-  },
   "keywords": [
     "sales",
     "training",
@@ -28,5 +25,8 @@
     "verkaufsschulung"
   ],
   "author": "SalesMaster",
-  "license": "MIT"
+  "license": "MIT",
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
 }

@@ -30,3 +30,6 @@ Thumbs.db
 
 # Old static files (moved to separate folder)
 # These are now in a different directory to avoid confusion
+
+# Local Netlify folder
+.netlify

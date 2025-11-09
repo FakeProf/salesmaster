@@ -1,8 +1,70 @@
 import express from 'express';
 import cors from 'cors';
+import { neon } from '@neondatabase/serverless';
 
 const app = express();
-const PORT = process.env.PORT || 4000;
+const PORT = process.env.PORT || 4001;
+
+// Neon Database Connection (optional for local development)
+let sql = null;
+try {
+  const databaseUrl = process.env.DATABASE_URL || process.env.NETLIFY_DATABASE_URL;
+  if (databaseUrl && databaseUrl !== 'postgresql://placeholder:placeholder@localhost:5432/placeholder') {
+    sql = neon(databaseUrl);
+    console.log('Database connected successfully');
+  } else {
+    console.log('No database URL provided, running in demo mode');
+  }
+} catch (error) {
+  console.log('Database connection failed, running in demo mode:', error.message);
+}
+
+// Initialize database tables
+async function initializeDatabase() {
+  if (!sql) {
+    console.log('Database not available, skipping table initialization');
+    return;
+  }
+  
+  try {
+    // Create scenarios table if it doesn't exist
+    await sql`
+      CREATE TABLE IF NOT EXISTS scenarios (
+        id SERIAL PRIMARY KEY,
+        title VARCHAR(255) NOT NULL,
+        industry VARCHAR(100) NOT NULL,
+        difficulty VARCHAR(50) NOT NULL,
+        description TEXT,
+        phases JSONB,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `;
+    
+    // Create user_progress table if it doesn't exist
+    await sql`
+      CREATE TABLE IF NOT EXISTS user_progress (
+        id SERIAL PRIMARY KEY,
+        user_id VARCHAR(255) NOT NULL,
+        scenario_id INTEGER REFERENCES scenarios(id),
+        completed BOOLEAN DEFAULT FALSE,
+        score INTEGER DEFAULT 0,
+        completed_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `;
+    
+    console.log('Database tables initialized successfully');
+  } catch (error) {
+    console.log('Database initialization failed:', error.message);
+  }
+}
+
+// Database connection (using Neon)
+// const pool = new Pool({
+//   connectionString: process.env.DATABASE_URL,
+//   ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+// });
 
 app.use(cors());
 app.use(express.json());
@@ -122,6 +184,59 @@ const scenarios = [
       'Welche Subprozessoren nutzen Sie?',
       'Wie lange speichern Sie Daten?'
     ]
+  },
+  { 
+    id: 'einwandbehandlung', 
+    title: 'Einwandbehandlung - Professionelle Gesprächsführung', 
+    industry: 'sales', 
+    difficulty: 'intermediate',
+    description: 'Lerne, wie du die häufigsten Einwände professionell behandelst und in Verkaufschancen umwandelst.',
+    situation: 'Sie führen ein Verkaufsgespräch und müssen verschiedene Einwände professionell behandeln',
+    challenge: 'Verschiedene Einwandtypen erkennen und passende Antwortstrategien anwenden',
+    goal: 'Einwände in Verkaufschancen umwandeln und Vertrauen aufbauen',
+    timeLimit: 25,
+    stakeholders: ['Kunde', 'Entscheidungsträger', 'Beeinflusser'],
+    objections: ['Preis-Einwände', 'Zeit-Einwände', 'Vertrauens-Einwände', 'Konkurrenz-Einwände'],
+    questions: [
+      'Welche Einwandtypen kennen Sie?',
+      'Wie gehen Sie mit Preis-Einwänden um?',
+      'Was tun bei Zeit-Einwänden?',
+      'Wie bauen Sie Vertrauen auf?',
+      'Wie positionieren Sie sich gegen Konkurrenz?'
+    ],
+    learningContent: {
+      title: 'Einwandbehandlung meistern',
+      description: 'Lerne, wie du die häufigsten Einwände professionell behandelst und in Verkaufschancen umwandelst.',
+      categories: [
+        {
+          name: 'Preis-Einwände',
+          description: 'Strategien für "zu teuer" und Budget-Einwände',
+          techniques: ['ROI-Rechnung', 'Wert-Demonstration', 'Zahlungsmodalitäten', 'Preisvergleich']
+        },
+        {
+          name: 'Zeit-Einwände', 
+          description: 'Umgang mit "keine Zeit" und Timing-Problemen',
+          techniques: ['Prioritäten klären', 'Zeit sparen zeigen', 'Terminvereinbarung', 'Dringlichkeit schaffen']
+        },
+        {
+          name: 'Vertrauens-Einwände',
+          description: 'Vertrauen aufbauen bei Skepsis und Misstrauen',
+          techniques: ['Referenzen zeigen', 'Testimonials', 'Probezeit anbieten', 'Garantien geben']
+        },
+        {
+          name: 'Konkurrenz-Einwände',
+          description: 'Positionierung gegen Mitbewerber',
+          techniques: ['Differenzierung', 'Alleinstellungsmerkmale', 'Vergleichsgespräch', 'Zusatznutzen']
+        }
+      ],
+      methods: [
+        'ZHL-Methode (Zustimmen – Hinterfragen – Lösen)',
+        'Feel-Felt-Found-Methode', 
+        'Spiegeln & Verstehen statt Überreden',
+        'Fragetechniken zur Einwand-Analyse',
+        'Sandwich-Technik (positiv – Einwand – positiv)'
+      ]
+    }
   }
 ];
 
@@ -129,8 +244,28 @@ app.get('/api/health', (_req, res) => {
   res.json({ ok: true });
 });
 
-app.get('/api/scenarios', (_req, res) => {
-  res.json({ scenarios });
+app.get('/api/scenarios', async (req, res) => {
+  try {
+    // Try to fetch from database first, fallback to static data
+    if (sql) {
+      try {
+        const dbScenarios = await sql`SELECT * FROM scenarios ORDER BY id`;
+        if (dbScenarios && dbScenarios.length > 0) {
+          return res.json({ scenarios: dbScenarios });
+        }
+      } catch (dbError) {
+        console.log('Database not ready, using static data:', dbError.message);
+      }
+    } else {
+      console.log('No database connection, using static data');
+    }
+    
+    // Fallback to static data
+    res.json({ scenarios });
+  } catch (error) {
+    console.error('Error fetching scenarios:', error);
+    res.status(500).json({ error: 'Failed to fetch scenarios' });
+  }
 });
 
 app.get('/api/scenarios/:id', (req, res) => {
@@ -155,8 +290,80 @@ app.get('/api/quiz/:topic', (req, res) => {
   });
 });
 
-app.listen(PORT, () => {
-  console.log(`Backend listening on http://localhost:${PORT}`);
+// User Progress API
+app.get('/api/progress/:userId', async (req, res) => {
+  try {
+    if (!sql) {
+      console.log('No database connection, returning empty progress');
+      return res.json({ progress: [] });
+    }
+    
+    const userId = req.params.userId;
+    const progress = await sql`
+      SELECT s.title, s.industry, up.completed, up.score, up.completed_at
+      FROM user_progress up
+      JOIN scenarios s ON up.scenario_id = s.id
+      WHERE up.user_id = ${userId}
+      ORDER BY up.completed_at DESC
+    `;
+    res.json({ progress });
+  } catch (error) {
+    console.error('Error fetching progress:', error);
+    res.status(500).json({ error: 'Failed to fetch progress' });
+  }
 });
+
+// Save Progress API
+app.post('/api/progress', async (req, res) => {
+  try {
+    if (!sql) {
+      console.log('No database connection, progress not saved');
+      return res.json({ success: true, message: 'Progress not saved (no database connection)' });
+    }
+    
+    const { userId, scenarioId, completed, score } = req.body;
+    
+    const result = await sql`
+      INSERT INTO user_progress (user_id, scenario_id, completed, score, completed_at)
+      VALUES (${userId}, ${scenarioId}, ${completed}, ${score}, ${completed ? new Date() : null})
+      ON CONFLICT (user_id, scenario_id) 
+      DO UPDATE SET 
+        completed = ${completed},
+        score = ${score},
+        completed_at = ${completed ? new Date() : null}
+      RETURNING *
+    `;
+    
+    res.json({ success: true, data: result[0] });
+  } catch (error) {
+    console.error('Error saving progress:', error);
+    res.status(500).json({ error: 'Failed to save progress' });
+  }
+});
+
+// Start server with port fallback
+const startServer = async () => {
+  const server = app.listen(PORT, async () => {
+    console.log(`Backend listening on http://localhost:${PORT}`);
+    
+    // Initialize database
+    await initializeDatabase();
+  });
+
+  server.on('error', (err) => {
+    if (err.code === 'EADDRINUSE') {
+      console.log(`Port ${PORT} is in use, trying ${PORT + 1}...`);
+      const newPort = PORT + 1;
+      const newServer = app.listen(newPort, async () => {
+        console.log(`Backend listening on http://localhost:${newPort}`);
+        await initializeDatabase();
+      });
+    } else {
+      console.error('Server error:', err);
+    }
+  });
+};
+
+startServer();
 
 

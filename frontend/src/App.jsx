@@ -1,5 +1,6 @@
 import React from 'react'
 import { Routes, Route, NavLink } from 'react-router-dom'
+import EmailChecker from './EmailChecker'
 import './App.css'
 
 function Layout({ children }) {
@@ -15,6 +16,7 @@ function Layout({ children }) {
             <NavLink to="/practice" className="nav-tab">Übungsmodus</NavLink>
             <NavLink to="/scenarios" className="nav-tab">Szenarien</NavLink>
             <NavLink to="/progress" className="nav-tab">Fortschritt</NavLink>
+            <NavLink to="/email-check" className="nav-tab">E-Mail-Prüfung</NavLink>
           </nav>
         </div>
       </header>
@@ -497,6 +499,7 @@ export default function App() {
         <Route path="/practice" element={<Practice />} />
         <Route path="/scenarios" element={<Scenarios />} />
         <Route path="/progress" element={<Progress />} />
+        <Route path="/email-check" element={<EmailChecker />} />
       </Routes>
     </Layout>
   )
