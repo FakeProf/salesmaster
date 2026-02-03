@@ -129,7 +129,7 @@ app.use(express.json());
 const sessionSecret = process.env.SESSION_SECRET || 'salesmaster-dev-secret-change-in-production';
 const isNetlify = process.env.NETLIFY === 'true' || process.env.NETLIFY === true;
 if (isNetlify && !process.env.SESSION_SECRET) {
-  console.warn('SESSION_SECRET ist nicht gesetzt. Bitte in Netlify unter Site settings → Environment variables setzen (z. B. langer Zufallsstring).');
+  console.warn('SESSION_SECRET nicht gesetzt – es wird ein Standardwert genutzt. Für Produktion in Netlify unter Environment variables setzen.');
 }
 if (isNetlify) {
   const cookieSession = (await import('cookie-session')).default;
@@ -197,8 +197,9 @@ app.post('/auth/register', async (req, res) => {
     if (e.code === '23505') {
       return res.status(409).json({ error: 'Diese E-Mail-Adresse ist bereits registriert.' });
     }
-    console.error('Register error:', e);
-    res.status(500).json({ error: 'Registrierung fehlgeschlagen.' });
+    console.error('Register error:', e?.message || e, 'code:', e?.code, 'stack:', e?.stack);
+    const hint = e?.code ? ' (Datenbankfehler – prüfe DATABASE_URL und Netlify Function-Log)' : '';
+    res.status(500).json({ error: 'Registrierung fehlgeschlagen.' + hint });
   }
 });
 
@@ -230,8 +231,9 @@ app.post('/auth/login', async (req, res) => {
       res.json({ user: req.session.user });
     }
   } catch (e) {
-    console.error('Login error:', e);
-    res.status(500).json({ error: 'Anmeldung fehlgeschlagen.' });
+    console.error('Login error:', e?.message || e, 'code:', e?.code);
+    const hint = e?.code ? ' (Datenbankfehler – prüfe DATABASE_URL und Netlify Function-Log)' : '';
+    res.status(500).json({ error: 'Anmeldung fehlgeschlagen.' + hint });
   }
 });
 

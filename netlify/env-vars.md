@@ -6,8 +6,8 @@ In Netlify unter **Site settings → Environment variables** folgende Variablen 
 
 | Variable | Pflicht | Beschreibung |
 |----------|--------|--------------|
-| `DATABASE_URL` | Ja | Neon-PostgreSQL-URL (wie in `backend/.env` lokal) |
-| `SESSION_SECRET` | Ja | Geheimer Schlüssel für Login-Sessions. **Unbedingt setzen** – sonst wird ein Standardwert genutzt (unsicher). |
+| `DATABASE_URL` | **Ja** | Neon-PostgreSQL-URL (wie in `backend/.env` lokal). Ohne diese Variable schlägt Registrierung/Anmeldung fehl. |
+| `SESSION_SECRET` | Nein | Geheimer Schlüssel für Sessions (empfohlen für Produktion). Ohne Wert wird ein Standard genutzt – die Anmeldung funktioniert trotzdem. |
 
 **SESSION_SECRET erzeugen** (z. B. lokal in der Konsole):
 
