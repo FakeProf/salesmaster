@@ -18,5 +18,9 @@ async function getHandler() {
 
 export async function handler(event, context) {
   const serverless = await getHandler();
+  // Netlify ruft die Function unter /.netlify/functions/server/... auf – Express braucht den echten Pfad (/api/..., /auth/...)
+  if (event.path && event.path.startsWith('/.netlify/functions/server')) {
+    event = { ...event, path: event.path.replace('/.netlify/functions/server', '') || '/' };
+  }
   return serverless(event, context);
 }

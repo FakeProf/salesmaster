@@ -12,16 +12,16 @@
 [functions.server]
   timeout = 26
 
-# API und Auth an Express-Backend (Netlify Function) weiterleiten – vor dem Catch-all
+# API und Auth an Express-Backend – Pfad mit :splat weitergeben, damit Express /api/* und /auth/* erkennt
 [[redirects]]
   from = "/api/*"
-  to = "/.netlify/functions/server"
+  to = "/.netlify/functions/server/api/:splat"
   status = 200
   force = true
 
 [[redirects]]
   from = "/auth/*"
-  to = "/.netlify/functions/server"
+  to = "/.netlify/functions/server/auth/:splat"
   status = 200
   force = true
 

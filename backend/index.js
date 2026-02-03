@@ -128,6 +128,9 @@ app.use(cookieParser());
 app.use(express.json());
 const sessionSecret = process.env.SESSION_SECRET || 'salesmaster-dev-secret-change-in-production';
 const isNetlify = process.env.NETLIFY === 'true' || process.env.NETLIFY === true;
+if (isNetlify && !process.env.SESSION_SECRET) {
+  console.warn('SESSION_SECRET ist nicht gesetzt. Bitte in Netlify unter Site settings → Environment variables setzen (z. B. langer Zufallsstring).');
+}
 if (isNetlify) {
   const cookieSession = (await import('cookie-session')).default;
   app.use(cookieSession({
