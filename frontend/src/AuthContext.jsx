@@ -43,12 +43,22 @@ export function AuthProvider({ children }) {
       if (contentType.includes('text/html')) {
         return { ok: false, error: authErrorMessage(!import.meta.env.VITE_API_URL) };
       }
-      const data = await res.json().catch(() => ({}));
+      let data = {};
+      try {
+        data = await res.json();
+      } catch (_) {
+        const text = await res.text().catch(() => '');
+        const preview = text ? ` – Antwort: ${text.trim().slice(0, 80)}${text.length > 80 ? '…' : ''}` : '';
+        console.error('Login response not JSON:', res.status, text.slice(0, 300));
+        return { ok: false, error: `Anmeldung fehlgeschlagen. (HTTP ${res.status}${preview})` };
+      }
       if (res.ok && data.user) {
         setUser(data.user);
         return { ok: true };
       }
-      return { ok: false, error: data.error || 'Anmeldung fehlgeschlagen.' };
+      const msg = data.error || 'Anmeldung fehlgeschlagen.';
+      const detail = data.detail ? ` – ${data.detail}` : '';
+      return { ok: false, error: (res.status >= 500 ? `${msg} (HTTP ${res.status})` : msg) + detail };
     } catch (err) {
       console.error('Login error:', err);
       const isLive = typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
@@ -66,12 +76,21 @@ export function AuthProvider({ children }) {
       if (contentType.includes('text/html')) {
         return { ok: false, error: authErrorMessage(!import.meta.env.VITE_API_URL) };
       }
-      const data = await res.json().catch(() => ({}));
+      let data = {};
+      try {
+        data = await res.json();
+      } catch (_) {
+        const text = await res.text().catch(() => '');
+        console.error('Register response not JSON:', res.status, text.slice(0, 300));
+        return { ok: false, error: `Registrierung fehlgeschlagen. (HTTP ${res.status}${text ? ' – Antwort ist kein JSON)' : ')'}` };
+      }
       if (res.ok && data.user) {
         setUser(data.user);
         return { ok: true };
       }
-      return { ok: false, error: data.error || 'Registrierung fehlgeschlagen.' };
+      const msg = data.error || 'Registrierung fehlgeschlagen.';
+      const detail = data.detail ? ` – ${data.detail}` : '';
+      return { ok: false, error: (res.status >= 500 ? `${msg} (HTTP ${res.status})` : msg) + detail };
     } catch (err) {
       console.error('Register error:', err);
       const isLive = typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';

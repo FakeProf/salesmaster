@@ -198,8 +198,11 @@ app.post('/auth/register', async (req, res) => {
       return res.status(409).json({ error: 'Diese E-Mail-Adresse ist bereits registriert.' });
     }
     console.error('Register error:', e?.message || e, 'code:', e?.code, 'stack:', e?.stack);
-    const hint = e?.code ? ' (Datenbankfehler – prüfe DATABASE_URL und Netlify Function-Log)' : '';
-    res.status(500).json({ error: 'Registrierung fehlgeschlagen.' + hint });
+    const detail = (e?.message && typeof e.message === 'string') ? e.message.slice(0, 200) : (e?.code ? String(e.code) : '');
+    res.status(500).json({
+      error: 'Registrierung fehlgeschlagen.',
+      detail: detail || (e?.code ? 'Datenbankfehler – DATABASE_URL prüfen.' : ''),
+    });
   }
 });
 
@@ -232,8 +235,11 @@ app.post('/auth/login', async (req, res) => {
     }
   } catch (e) {
     console.error('Login error:', e?.message || e, 'code:', e?.code);
-    const hint = e?.code ? ' (Datenbankfehler – prüfe DATABASE_URL und Netlify Function-Log)' : '';
-    res.status(500).json({ error: 'Anmeldung fehlgeschlagen.' + hint });
+    const detail = (e?.message && typeof e.message === 'string') ? e.message.slice(0, 200) : (e?.code ? String(e.code) : '');
+    res.status(500).json({
+      error: 'Anmeldung fehlgeschlagen.',
+      detail: detail || (e?.code ? 'Datenbankfehler – DATABASE_URL prüfen.' : ''),
+    });
   }
 });
 
@@ -242,6 +248,15 @@ app.get('/auth/me', (req, res) => {
     return res.json({ user: req.session.user });
   }
   res.status(401).json({ user: null });
+});
+
+// Diagnose: Erreichbarkeit + DB (ohne sensible Daten)
+app.get('/auth/status', (_req, res) => {
+  res.json({
+    ok: true,
+    db: !!sql,
+    netlify: !!process.env.NETLIFY,
+  });
 });
 
 app.post('/auth/logout', (req, res) => {

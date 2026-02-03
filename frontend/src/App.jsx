@@ -68,7 +68,7 @@ function Layout({ children }) {
                       <button type="button" className="header-user-menu-item header-user-menu-logout" onClick={() => { setUserMenuOpen(false); logout(); }}>
                         Abmelden
                       </button>
-                    </div>
+        </div>
                   )}
                 </div>
               ) : (
@@ -103,7 +103,6 @@ function Layout({ children }) {
             <h4>Rechtliches</h4>
             <NavLink to="/datenschutz">Datenschutz</NavLink>
             <NavLink to="/impressum">Impressum</NavLink>
-            <NavLink to="/agb">AGB</NavLink>
             <NavLink to="/cookies">Cookies</NavLink>
           </div>
           <div className="footer-section">
@@ -740,7 +739,7 @@ function Training() {
         body: JSON.stringify({ moduleId: activeModule, questionId: question?.id, correct })
       }).catch(() => {})
     }
-
+    
     if (currentQuestionIndex < currentQuestions.length - 1) {
       setCurrentQuestionIndex(currentQuestionIndex + 1)
       setSelectedAnswer(null)
@@ -895,7 +894,7 @@ function Practice() {
   const [activeTopic, setActiveTopic] = React.useState(null)
   const [insightsData, setInsightsData] = React.useState([])
   const [insightsLoading, setInsightsLoading] = React.useState(false)
-
+  
   // Adaptives Quiz State
   const [quizQuestionIndex, setQuizQuestionIndex] = React.useState(0)
   const [quizAnswer, setQuizAnswer] = React.useState(null)
@@ -3473,20 +3472,20 @@ function Practice() {
         ) : insightsData.length === 0 ? (
           <p className="insights-empty">Noch keine Antworten im Vertriebs-Training. Beantworte Fragen in den Trainingsmodulen, damit hier deine Stärken und Schwächen angezeigt werden.</p>
         ) : (
-          <div className="insights-container">
-            <div className="insights-grid">
+        <div className="insights-container">
+          <div className="insights-grid">
               {insightsData.map((item) => (
                 <div key={item.moduleId} className="insight-card">
                   <h3>{item.title}</h3>
-                  <div className="performance-bar">
+                <div className="performance-bar">
                     <div className="performance-fill" style={{ width: `${item.percentageCorrect}%` }} />
                     <span className="performance-score">{item.percentageCorrect}%</span>
-                  </div>
-                  <p className="insight-recommendation">Empfehlung: {item.recommendation}</p>
                 </div>
-              ))}
-            </div>
+                  <p className="insight-recommendation">Empfehlung: {item.recommendation}</p>
+              </div>
+            ))}
           </div>
+        </div>
         )}
       </div>
     )
@@ -3613,8 +3612,8 @@ function Scenarios() {
       .then(j => {
         const scenariosData = Array.isArray(j?.scenarios) ? j.scenarios : []
         if (scenariosData.length > 0) {
-          setScenarios(scenariosData)
-          setLoading(false)
+        setScenarios(scenariosData)
+        setLoading(false)
           return
         }
         throw new Error('No scenarios from API')
@@ -3628,9 +3627,9 @@ function Scenarios() {
             setLoading(false)
           })
           .catch(() => {
-            setScenarios([])
-            setFilteredScenarios([])
-            setLoading(false)
+        setScenarios([])
+        setFilteredScenarios([])
+        setLoading(false)
           })
       })
   }, [])
@@ -4428,11 +4427,11 @@ function Progress() {
             <p className="activity-empty">Noch keine Aktivitäten. Starte ein Training oder ein Szenario!</p>
           ) : (
             recentActivity.map((activity, idx) => (
-              <div key={idx} className="activity-item">
-                <div className="activity-date">{activity.date}</div>
-                <div className="activity-description">{activity.activity}</div>
-                <div className="activity-xp">+{activity.xp} XP</div>
-              </div>
+            <div key={idx} className="activity-item">
+              <div className="activity-date">{activity.date}</div>
+              <div className="activity-description">{activity.activity}</div>
+              <div className="activity-xp">+{activity.xp} XP</div>
+            </div>
             ))
           )}
         </div>
@@ -4567,72 +4566,6 @@ function Impressum() {
   )
 }
 
-function AGB() {
-  return (
-    <div className="page-container">
-      <div className="section-header">
-        <h2>Allgemeine Geschäftsbedingungen</h2>
-      </div>
-      <div className="content-section">
-        <h3>1. Geltungsbereich</h3>
-        <p>
-          Diese Allgemeinen Geschäftsbedingungen (AGB) gelten für alle Verträge zwischen der SalesMaster GmbH 
-          (nachfolgend "Anbieter") und den Nutzern (nachfolgend "Kunde") der Online-Plattform SalesMaster.
-        </p>
-
-        <h3>2. Vertragsgegenstand</h3>
-        <p>
-          SalesMaster ist eine Online-Plattform für Vertriebsschulungen und -trainings. Der Anbieter stellt dem 
-          Kunden Zugang zu Lerninhalten, Übungen und Szenarien zur Verfügung.
-        </p>
-
-        <h3>3. Registrierung und Konto</h3>
-        <p>
-          Für die Nutzung von SalesMaster ist eine Registrierung erforderlich. Der Kunde verpflichtet sich, 
-          wahrheitsgemäße Angaben zu machen und seine Zugangsdaten geheim zu halten.
-        </p>
-
-        <h3>4. Leistungen</h3>
-        <p>
-          Der Anbieter stellt dem Kunden Zugang zu den auf der Plattform verfügbaren Lerninhalten zur Verfügung. 
-          Der Umfang der Leistungen richtet sich nach dem gewählten Tarif.
-        </p>
-
-        <h3>5. Preise und Zahlung</h3>
-        <p>
-          Die Preise für die Nutzung von SalesMaster sind auf der Website angegeben. Alle Preise verstehen sich 
-          inklusive der gesetzlichen Mehrwertsteuer. Die Zahlung erfolgt im Voraus.
-        </p>
-
-        <h3>6. Kündigung</h3>
-        <p>
-          Der Kunde kann sein Konto jederzeit kündigen. Der Anbieter behält sich vor, das Konto bei Verstößen 
-          gegen diese AGB zu sperren oder zu löschen.
-        </p>
-
-        <h3>7. Haftung</h3>
-        <p>
-          Der Anbieter haftet nur für Vorsatz und grobe Fahrlässigkeit. Die Haftung für leichte Fahrlässigkeit 
-          ist ausgeschlossen, soweit nicht Schäden aus der Verletzung des Lebens, des Körpers oder der Gesundheit 
-          resultieren.
-        </p>
-
-        <h3>8. Datenschutz</h3>
-        <p>
-          Der Schutz Ihrer personenbezogenen Daten ist uns wichtig. Informationen zur Datenverarbeitung finden 
-          Sie in unserer Datenschutzerklärung.
-        </p>
-
-        <h3>9. Schlussbestimmungen</h3>
-        <p>
-          Es gilt deutsches Recht. Gerichtsstand ist der Sitz des Anbieters, sofern der Kunde Kaufmann, 
-          juristische Person des öffentlichen Rechts oder öffentlich-rechtliches Sondervermögen ist.
-        </p>
-      </div>
-    </div>
-  )
-}
-
 function Cookies() {
   return (
     <div className="page-container">
@@ -4709,7 +4642,6 @@ export default function App() {
         <Route path="/kontakt" element={<Kontakt />} />
         <Route path="/datenschutz" element={<Datenschutz />} />
         <Route path="/impressum" element={<Impressum />} />
-        <Route path="/agb" element={<AGB />} />
         <Route path="/cookies" element={<Cookies />} />
       </Routes>
     </Layout>
