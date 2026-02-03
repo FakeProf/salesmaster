@@ -9,6 +9,8 @@ import './App.css'
 function Layout({ children }) {
   const { user, loading, logout, refreshUser, showAuthModal, setShowAuthModal } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
+  const [userMenuOpen, setUserMenuOpen] = React.useState(false)
+  const userMenuRef = React.useRef(null)
 
   useEffect(() => {
     if (searchParams.get('logged_in') === '1') {
@@ -21,6 +23,15 @@ function Layout({ children }) {
     }
   }, [refreshUser, searchParams, setSearchParams])
 
+  React.useEffect(() => {
+    if (!userMenuOpen) return
+    const close = (e) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target)) setUserMenuOpen(false)
+    }
+    document.addEventListener('click', close)
+    return () => document.removeEventListener('click', close)
+  }, [userMenuOpen])
+
   return (
     <div className="app-container">
       <header className="app-header">
@@ -32,16 +43,34 @@ function Layout({ children }) {
             <NavLink to="/training" className="nav-tab">Vertriebs-Training</NavLink>
             <NavLink to="/practice" className="nav-tab">Übungsmodus</NavLink>
             <NavLink to="/scenarios" className="nav-tab">Szenarien</NavLink>
-            <NavLink to="/progress" className="nav-tab">Fortschritt</NavLink>
+            <NavLink to="/leitfaden" className="nav-tab">Leitfaden</NavLink>
             <NavLink to="/email-check" className="nav-tab">E-Mail-Prüfung</NavLink>
           </nav>
           <div className="header-auth">
             {!loading && (
               user ? (
-                <span className="header-user">
-                  <span className="header-user-name">{user.name || user.email}</span>
-                  <button type="button" className="btn btn-outline btn-logout" onClick={logout}>Abmelden</button>
-                </span>
+                <div className="header-user-wrap" ref={userMenuRef}>
+                  <button
+                    type="button"
+                    className="header-user-trigger"
+                    onClick={() => setUserMenuOpen((o) => !o)}
+                    aria-expanded={userMenuOpen}
+                    aria-haspopup="true"
+                  >
+                    <span className="header-user-name">{user.name || user.email}</span>
+                    <span className="header-user-chevron" aria-hidden>▼</span>
+                  </button>
+                  {userMenuOpen && (
+                    <div className="header-user-menu">
+                      <NavLink to="/progress" className="header-user-menu-item" onClick={() => setUserMenuOpen(false)}>
+                        Fortschritt
+                      </NavLink>
+                      <button type="button" className="header-user-menu-item header-user-menu-logout" onClick={() => { setUserMenuOpen(false); logout(); }}>
+                        Abmelden
+                      </button>
+                    </div>
+                  )}
+                </div>
               ) : (
                 <>
                   <button type="button" className="btn btn-auth" onClick={() => setShowAuthModal(true)}>
@@ -3578,28 +3607,31 @@ function Scenarios() {
     setLoading(true)
     apiFetch('/api/scenarios')
       .then(r => {
-        if (!r.ok) {
-          throw new Error(`HTTP error! status: ${r.status}`)
-        }
+        if (!r.ok) throw new Error(`HTTP ${r.status}`)
         return r.json()
       })
       .then(j => {
-        const scenariosData = j.scenarios ?? []
-        console.log('Loaded scenarios:', scenariosData.length, scenariosData)
-        console.log('Sample scenario:', scenariosData[0])
+        const scenariosData = Array.isArray(j?.scenarios) ? j.scenarios : []
         if (scenariosData.length > 0) {
-          console.log('First scenario industry:', scenariosData[0].industry)
+          setScenarios(scenariosData)
+          setLoading(false)
+          return
         }
-        setScenarios(scenariosData)
-        // Don't filter here - let the other useEffect handle it
-        setLoading(false)
+        throw new Error('No scenarios from API')
       })
-      .catch((error) => {
-        console.error('Error fetching scenarios:', error)
-        console.error('Full error:', error.message, error.stack)
-        setScenarios([])
-        setFilteredScenarios([])
-        setLoading(false)
+      .catch(() => {
+        // Live ohne Backend: Fallback aus statischer Datei (wird bei Build in dist kopiert)
+        fetch('/scenarios.json')
+          .then(r => r.ok ? r.json() : { scenarios: [] })
+          .then(j => {
+            setScenarios(j.scenarios ?? [])
+            setLoading(false)
+          })
+          .catch(() => {
+            setScenarios([])
+            setFilteredScenarios([])
+            setLoading(false)
+          })
       })
   }, [])
 
@@ -3951,6 +3983,290 @@ const TRAINING_MODULE_NAMES = {
   'sales-language': 'Verkaufssprache'
 }
 const TOTAL_TRAINING_MODULES = 4
+
+// Leitfaden-Generator: Kapitel mit je mehreren Formulierungs-Varianten
+const LEITFADEN_KAPITEL = [
+  {
+    id: 'begruessung',
+    title: 'Begrüßung',
+    options: [
+      'Guten Tag.',
+      'Einen schönen guten Tag.',
+      'Guten Tag, vielen Dank für Ihre Zeit heute.',
+      'Hallo und herzlich willkommen.',
+      'Schön, dass Sie da sind.',
+      'Guten Tag, freut mich, Sie kennenzulernen.'
+    ]
+  },
+  {
+    id: 'einstieg',
+    title: 'Einstieg / Small Talk',
+    options: [
+      'Wie geht es Ihnen heute?',
+      'Wie war Ihre Anreise?',
+      'Sind Sie gut zu uns gefunden?',
+      'Darf ich Ihnen etwas zu trinken anbieten?',
+      'Bevor wir starten: Gibt es etwas, das Sie heute besonders beschäftigt?'
+    ]
+  },
+  {
+    id: 'fragen',
+    title: 'Fragen & Bedarf',
+    options: [
+      'Wie läuft bei Ihnen aktuell …?',
+      'Was ist Ihnen dabei am wichtigsten?',
+      'Welche Herausforderungen haben Sie in diesem Bereich?',
+      'Was würde passieren, wenn Sie das Problem nicht lösen?',
+      'Wie würden Sie idealerweise arbeiten wollen?',
+      'Was wäre für Sie ein Erfolg in den nächsten 6 Monaten?',
+      'Wer ist neben Ihnen noch in die Entscheidung eingebunden?',
+      'Was sollte ich unbedingt noch wissen?',
+      'Welche Fragen habe ich Ihnen noch nicht gestellt?'
+    ]
+  },
+  {
+    id: 'pitch',
+    title: 'Lösung vorstellen (Pitch)',
+    options: [
+      'Darf ich Ihnen unsere Lösung kurz vorstellen?',
+      'Lassen Sie mich zeigen, wie wir Sie unterstützen können.',
+      'Unsere Lösung hilft Ihnen dabei, …',
+      'Wo sehen Sie den größten Nutzen für sich?',
+      'Andere Kunden sagen uns, dass …',
+      'Der entscheidende Vorteil für Sie wäre …'
+    ]
+  },
+  {
+    id: 'einwaende',
+    title: 'Einwände aufgreifen',
+    options: [
+      'Teuer im Vergleich zu was genau?',
+      'Was müsste passieren, damit es sich für Sie lohnt?',
+      'Das verstehe ich. Was genau möchten Sie noch bedenken?',
+      'Verstehe. Darf ich Ihnen zeigen, wie andere das gelöst haben?',
+      'Das ist eine wichtige Frage. Lassen Sie mich das kurz einordnen.',
+      'Was bräuchten Sie, um den nächsten Schritt zu gehen?'
+    ]
+  },
+  {
+    id: 'abschluss',
+    title: 'Abschluss & nächste Schritte',
+    options: [
+      'Was wäre der nächste sinnvolle Schritt für Sie?',
+      'Wie klingt das für Sie – sollen wir mit … starten?',
+      'Wann möchten Sie starten – eher diese oder nächste Woche?',
+      'Soll ich Ihnen die nächsten Schritte kurz zusammenfassen?',
+      'Womit möchten Sie anfangen?',
+      'Passt das so für Sie?'
+    ]
+  },
+  {
+    id: 'verabschiedung',
+    title: 'Verabschiedung',
+    options: [
+      'Vielen Dank für das Gespräch.',
+      'Ich freue mich auf die weitere Zusammenarbeit.',
+      'Kann ich Ihnen noch etwas mitgeben?',
+      'Bei Fragen melden Sie sich gern.',
+      'Einen schönen Tag noch.',
+      'Bis bald und alles Gute.'
+    ]
+  }
+]
+
+const LEITFADEN_CHAPTER_TITLES = Object.fromEntries(LEITFADEN_KAPITEL.map(k => [k.id, k.title]))
+
+function LeitfadenGenerator() {
+  const [guideItems, setGuideItems] = React.useState([])
+  const [customInput, setCustomInput] = React.useState('')
+  const [dragSource, setDragSource] = React.useState(null) // 'suggest' | 'guide'
+  const [dragIndex, setDragIndex] = React.useState(null)
+  const [dropIndex, setDropIndex] = React.useState(null)
+  const nextId = React.useRef(1)
+
+  const addToGuide = (text, custom = false, chapterId = null) => {
+    if (!text.trim()) return
+    setGuideItems(prev => [...prev, { id: nextId.current++, text: text.trim(), custom, chapterId }])
+    if (custom) setCustomInput('')
+  }
+
+  const removeFromGuide = (index) => {
+    setGuideItems(prev => prev.filter((_, i) => i !== index))
+  }
+
+  const moveInGuide = (fromIndex, toIndex) => {
+    if (fromIndex === toIndex) return
+    setGuideItems(prev => {
+      const arr = [...prev]
+      const [item] = arr.splice(fromIndex, 1)
+      arr.splice(toIndex, 0, item)
+      return arr
+    })
+  }
+
+  const handleDragStart = (e, source, index, text, chapterId = null) => {
+    setDragSource(source)
+    setDragIndex(index)
+    e.dataTransfer.setData('text/plain', text)
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('application/json', JSON.stringify({ source, index, text, chapterId }))
+    e.target.classList.add('leitfaden-dragging')
+  }
+
+  const handleDragEnd = (e) => {
+    e.target.classList.remove('leitfaden-dragging')
+    setDragSource(null)
+    setDragIndex(null)
+    setDropIndex(null)
+  }
+
+  const handleDragOver = (e, toIndex) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    if (dragSource === 'guide') setDropIndex(toIndex)
+  }
+
+  const handleDropOnGuide = (e, toIndex) => {
+    e.preventDefault()
+    try {
+      const data = e.dataTransfer.getData('application/json')
+      if (data) {
+        const { source, index, text, chapterId } = JSON.parse(data)
+        if (source === 'suggest') {
+          addToGuide(text, false, chapterId || null)
+        } else if (source === 'guide' && typeof index === 'number') {
+          moveInGuide(index, toIndex)
+        }
+      } else {
+        const text = e.dataTransfer.getData('text/plain')
+        if (text) addToGuide(text, false, null)
+      }
+    } catch (_) {
+      const text = e.dataTransfer.getData('text/plain')
+      if (text) addToGuide(text, false, null)
+    }
+    setDropIndex(null)
+    setDragSource(null)
+    setDragIndex(null)
+  }
+
+  const handleCopy = () => {
+    const text = guideItems.map(i => i.text).join('\n')
+    if (text) {
+      navigator.clipboard.writeText(text).then(() => alert('Leitfaden in die Zwischenablage kopiert.'))
+    }
+  }
+
+  return (
+    <div className="leitfaden-container">
+      <div className="section-header">
+        <h2>Leitfaden-Generator</h2>
+        <p>Baue deinen Gesprächsleitfaden per Drag & Drop aus vorgeschlagenen Sätzen und eigenen Formulierungen.</p>
+      </div>
+
+      <div className="leitfaden-layout">
+        <section className="leitfaden-suggestions">
+          <h3>Vorgeschlagene Sätze nach Kapitel</h3>
+          <p className="leitfaden-hint">Wähle pro Kapitel eine Variante – ziehen oder klicken, um sie in deinen Leitfaden zu übernehmen.</p>
+          <div className="leitfaden-chapters">
+            {LEITFADEN_KAPITEL.map((kapitel) => (
+              <div key={kapitel.id} className="leitfaden-chapter">
+                <h4 className="leitfaden-chapter-title">{kapitel.title}</h4>
+                <div className="leitfaden-chips">
+                  {kapitel.options.map((satz, idx) => (
+                    <span
+                      key={idx}
+                      className="leitfaden-chip"
+                      draggable
+                      onDragStart={(e) => handleDragStart(e, 'suggest', idx, satz, kapitel.id)}
+                      onDragEnd={handleDragEnd}
+                      onClick={() => addToGuide(satz, false, kapitel.id)}
+                    >
+                      {satz}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="leitfaden-custom">
+            <label>Eigenen Satz hinzufügen</label>
+            <div className="leitfaden-custom-row">
+              <input
+                type="text"
+                value={customInput}
+                onChange={(e) => setCustomInput(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && addToGuide(customInput, true)}
+                placeholder="z. B. Ihr eigener Eröffnungssatz …"
+                className="leitfaden-input"
+              />
+              <button type="button" className="btn" onClick={() => addToGuide(customInput, true)}>
+                Hinzufügen
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <section
+          className={`leitfaden-guide ${guideItems.length === 0 ? 'leitfaden-guide-empty' : ''}`}
+          onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move' }}
+          onDrop={(e) => {
+            e.preventDefault()
+            const data = e.dataTransfer.getData('application/json')
+            if (data) {
+              try {
+                const { source, index, text, chapterId } = JSON.parse(data)
+                if (source === 'suggest') addToGuide(text, false, chapterId || null)
+                else if (source === 'guide') moveInGuide(index, guideItems.length)
+              } catch (_) {}
+            } else {
+              const text = e.dataTransfer.getData('text/plain')
+              if (text) addToGuide(text, false, null)
+            }
+            setDropIndex(null)
+          }}
+        >
+          <h3>Dein Leitfaden</h3>
+          <p className="leitfaden-hint">Reihenfolge per Drag & Drop ändern. Klicke auf ✕ zum Entfernen.</p>
+          {guideItems.length === 0 ? (
+            <p className="leitfaden-placeholder">Sätze hierher ziehen oder aus den Vorschlägen hinzufügen.</p>
+          ) : (
+            <ol className="leitfaden-list">
+              {guideItems.map((item, idx) => (
+                <li
+                  key={item.id}
+                  className={`leitfaden-list-item ${dropIndex === idx ? 'leitfaden-drop-here' : ''}`}
+                  draggable
+                  onDragStart={(e) => handleDragStart(e, 'guide', idx, item.text)}
+                  onDragEnd={handleDragEnd}
+                  onDragOver={(e) => handleDragOver(e, idx)}
+                  onDrop={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    if (dragSource === 'guide' && typeof dragIndex === 'number') moveInGuide(dragIndex, idx)
+                    setDropIndex(null)
+                  }}
+                >
+                  <span className="leitfaden-list-num">{idx + 1}.</span>
+                  <span className="leitfaden-list-text">{item.text}</span>
+                  {item.custom && <span className="leitfaden-list-badge leitfaden-badge-eigen">eigen</span>}
+                  {!item.custom && item.chapterId && <span className="leitfaden-list-badge">{LEITFADEN_CHAPTER_TITLES[item.chapterId] || item.chapterId}</span>}
+                  <button type="button" className="leitfaden-remove" onClick={() => removeFromGuide(idx)} aria-label="Entfernen">✕</button>
+                </li>
+              ))}
+            </ol>
+          )}
+          {guideItems.length > 0 && (
+            <div className="leitfaden-actions">
+              <button type="button" className="btn" onClick={handleCopy}>Leitfaden kopieren</button>
+              <button type="button" className="btn btn-outline" onClick={() => setGuideItems([])}>Leitfaden leeren</button>
+            </div>
+          )}
+        </section>
+      </div>
+    </div>
+  )
+}
 
 function Progress() {
   const { user, loading: authLoading, setShowAuthModal } = useAuth()
@@ -4388,6 +4704,7 @@ export default function App() {
         <Route path="/practice" element={<Practice />} />
         <Route path="/scenarios" element={<Scenarios />} />
         <Route path="/progress" element={<Progress />} />
+        <Route path="/leitfaden" element={<LeitfadenGenerator />} />
         <Route path="/email-check" element={<EmailChecker />} />
         <Route path="/kontakt" element={<Kontakt />} />
         <Route path="/datenschutz" element={<Datenschutz />} />

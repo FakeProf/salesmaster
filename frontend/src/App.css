@@ -96,11 +96,88 @@ body {
   color: #a0aec0;
   font-size: 0.95rem;
 }
+
+.header-user-wrap {
+  position: relative;
+}
+
+.header-user-trigger {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.4rem 0.6rem;
+  background: transparent;
+  border: 1px solid rgba(74, 85, 104, 0.5);
+  border-radius: 8px;
+  color: #e2e8f0;
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.header-user-trigger:hover {
+  border-color: #718096;
+  background: rgba(45, 55, 72, 0.5);
+}
+
 .header-user-name {
   max-width: 180px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.header-user-chevron {
+  font-size: 0.65rem;
+  color: #a0aec0;
+  transition: transform 0.2s;
+}
+
+.header-user-trigger[aria-expanded="true"] .header-user-chevron {
+  transform: rotate(180deg);
+}
+
+.header-user-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 0.35rem;
+  min-width: 160px;
+  background: rgba(26, 32, 44, 0.98);
+  border: 1px solid rgba(74, 85, 104, 0.5);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  z-index: 200;
+  overflow: hidden;
+}
+
+.header-user-menu-item {
+  display: block;
+  width: 100%;
+  padding: 0.6rem 1rem;
+  text-align: left;
+  background: none;
+  border: none;
+  color: #e2e8f0;
+  font-size: 0.95rem;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.header-user-menu-item:hover {
+  background: rgba(74, 85, 104, 0.5);
+  color: #81c784;
+}
+
+.header-user-menu-logout {
+  color: #a0aec0;
+  border-top: 1px solid rgba(74, 85, 104, 0.3);
+}
+
+.header-user-menu-logout:hover {
+  color: #feb2b2;
+  background: rgba(229, 62, 62, 0.15);
 }
 .btn-auth {
   padding: 0.5rem 1rem;
@@ -1816,4 +1893,244 @@ body {
 .contact-form .btn {
   align-self: flex-start;
   margin-top: 0.5rem;
+}
+
+/* Leitfaden-Generator */
+.leitfaden-container {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 1rem;
+}
+
+.leitfaden-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2rem;
+  align-items: start;
+}
+
+@media (max-width: 900px) {
+  .leitfaden-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.leitfaden-suggestions,
+.leitfaden-guide {
+  background: rgba(26, 32, 44, 0.9);
+  border-radius: 12px;
+  padding: 1.5rem;
+  border: 1px solid rgba(74, 85, 104, 0.4);
+}
+
+.leitfaden-suggestions h3,
+.leitfaden-guide h3 {
+  color: #81c784;
+  margin-bottom: 0.5rem;
+  font-size: 1.2rem;
+}
+
+.leitfaden-hint {
+  color: #a0aec0;
+  font-size: 0.9rem;
+  margin-bottom: 1rem;
+}
+
+.leitfaden-chapters {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  margin-bottom: 1rem;
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+.leitfaden-chapter {
+  border-bottom: 1px solid rgba(74, 85, 104, 0.3);
+  padding-bottom: 1rem;
+}
+
+.leitfaden-chapter:last-of-type {
+  border-bottom: none;
+}
+
+.leitfaden-chapter-title {
+  color: #a7f3d0;
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+
+.leitfaden-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0;
+}
+
+.leitfaden-chapter .leitfaden-chips {
+  margin-bottom: 0;
+}
+
+.leitfaden-chip {
+  display: inline-block;
+  padding: 0.5rem 0.75rem;
+  background: rgba(45, 55, 72, 0.9);
+  border: 1px solid rgba(74, 85, 104, 0.5);
+  border-radius: 8px;
+  color: #e2e8f0;
+  font-size: 0.9rem;
+  cursor: grab;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+.leitfaden-chip:hover {
+  background: rgba(74, 85, 104, 0.6);
+  border-color: #81c784;
+}
+
+.leitfaden-chip:active {
+  cursor: grabbing;
+}
+
+.leitfaden-chip.leitfaden-dragging {
+  opacity: 0.6;
+  cursor: grabbing;
+}
+
+.leitfaden-custom {
+  margin-top: 1rem;
+}
+
+.leitfaden-custom label {
+  display: block;
+  color: #a0aec0;
+  font-size: 0.9rem;
+  margin-bottom: 0.5rem;
+}
+
+.leitfaden-custom-row {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.leitfaden-input {
+  flex: 1;
+  padding: 0.6rem 0.75rem;
+  background: rgba(45, 55, 72, 0.8);
+  border: 1px solid rgba(74, 85, 104, 0.5);
+  border-radius: 8px;
+  color: #e2e8f0;
+  font-size: 1rem;
+}
+
+.leitfaden-input::placeholder {
+  color: #718096;
+}
+
+.leitfaden-input:focus {
+  outline: none;
+  border-color: #81c784;
+}
+
+.leitfaden-guide {
+  min-height: 280px;
+}
+
+.leitfaden-guide-empty .leitfaden-placeholder {
+  color: #718096;
+  text-align: center;
+  padding: 2rem;
+  border: 2px dashed rgba(74, 85, 104, 0.6);
+  border-radius: 8px;
+  margin-top: 0.5rem;
+}
+
+.leitfaden-list {
+  list-style: none;
+  counter-reset: leitfaden;
+  padding: 0;
+  margin: 0;
+}
+
+.leitfaden-list-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 0.75rem;
+  margin-bottom: 0.5rem;
+  background: rgba(45, 55, 72, 0.7);
+  border: 1px solid rgba(74, 85, 104, 0.4);
+  border-radius: 8px;
+  cursor: grab;
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.leitfaden-list-item:hover {
+  border-color: rgba(129, 199, 132, 0.5);
+}
+
+.leitfaden-list-item:active {
+  cursor: grabbing;
+}
+
+.leitfaden-list-item.leitfaden-dragging {
+  opacity: 0.6;
+}
+
+.leitfaden-list-item.leitfaden-drop-here {
+  border-color: #81c784;
+  background: rgba(129, 199, 132, 0.1);
+}
+
+.leitfaden-list-num {
+  flex-shrink: 0;
+  color: #81c784;
+  font-weight: 600;
+  min-width: 1.5rem;
+}
+
+.leitfaden-list-text {
+  flex: 1;
+  color: #e2e8f0;
+}
+
+.leitfaden-list-badge {
+  flex-shrink: 0;
+  font-size: 0.7rem;
+  padding: 0.2rem 0.4rem;
+  background: rgba(129, 199, 132, 0.2);
+  color: #81c784;
+  border-radius: 4px;
+}
+
+.leitfaden-badge-eigen {
+  background: rgba(66, 153, 225, 0.25);
+  color: #63b3ed;
+}
+
+.leitfaden-remove {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  background: rgba(229, 62, 62, 0.2);
+  color: #e53e3e;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+  transition: background 0.2s;
+}
+
+.leitfaden-remove:hover {
+  background: rgba(229, 62, 62, 0.4);
+}
+
+.leitfaden-actions {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 1rem;
+  flex-wrap: wrap;
 }

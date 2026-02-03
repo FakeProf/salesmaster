@@ -28,12 +28,21 @@ export function AuthProvider({ children }) {
     loadUser();
   }, []);
 
+  const authErrorMessage = (isLive = false) =>
+    isLive
+      ? 'Backend nicht erreichbar. In der Live-Version muss die Backend-URL (VITE_API_URL) gesetzt sein.'
+      : 'Server nicht erreichbar. Läuft das Backend (z. B. npm run dev im Backend-Ordner)?';
+
   const loginWithEmail = async (email, password) => {
     try {
       const res = await apiFetch('/auth/login', {
         method: 'POST',
         body: JSON.stringify({ email, password }),
       });
+      const contentType = res.headers.get('content-type') || '';
+      if (contentType.includes('text/html')) {
+        return { ok: false, error: authErrorMessage(!import.meta.env.VITE_API_URL) };
+      }
       const data = await res.json().catch(() => ({}));
       if (res.ok && data.user) {
         setUser(data.user);
@@ -42,7 +51,8 @@ export function AuthProvider({ children }) {
       return { ok: false, error: data.error || 'Anmeldung fehlgeschlagen.' };
     } catch (err) {
       console.error('Login error:', err);
-      return { ok: false, error: 'Server nicht erreichbar. Läuft das Backend (npm run dev)?' };
+      const isLive = typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
+      return { ok: false, error: authErrorMessage(isLive) };
     }
   };
 
@@ -52,6 +62,10 @@ export function AuthProvider({ children }) {
         method: 'POST',
         body: JSON.stringify({ email, password, name }),
       });
+      const contentType = res.headers.get('content-type') || '';
+      if (contentType.includes('text/html')) {
+        return { ok: false, error: authErrorMessage(!import.meta.env.VITE_API_URL) };
+      }
       const data = await res.json().catch(() => ({}));
       if (res.ok && data.user) {
         setUser(data.user);
@@ -60,7 +74,8 @@ export function AuthProvider({ children }) {
       return { ok: false, error: data.error || 'Registrierung fehlgeschlagen.' };
     } catch (err) {
       console.error('Register error:', err);
-      return { ok: false, error: 'Server nicht erreichbar. Läuft das Backend (npm run dev)?' };
+      const isLive = typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
+      return { ok: false, error: authErrorMessage(isLive) };
     }
   };
 

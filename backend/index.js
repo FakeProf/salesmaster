@@ -1537,32 +1537,47 @@ app.get('/api/insights/me', async (req, res) => {
   }
 });
 
-// Start server with port fallback (probiert mehrere Ports bis einer frei ist)
-const startServer = async () => {
-  const portsToTry = [PORT, 4001, 40011, 40012, 40013, 40014, 40015, 40016, 40017, 40018];
-  let portIndex = 0;
-
-  function tryListen(port) {
-    const server = app.listen(port, async () => {
-      console.log(`Backend listening on http://localhost:${server.address().port}`);
-      await initializeDatabase();
+// Optional: Szenarien als JSON für Frontend-Fallback (Live ohne Backend) exportieren
+// Aufruf: WRITE_SCENARIOS_JSON=1 node backend/index.js
+if (process.env.WRITE_SCENARIOS_JSON) {
+  import('fs').then((fs) => {
+    import('path').then((path) => {
+      const outDir = path.join(__dirname, '..', 'frontend', 'public');
+      fs.mkdirSync(outDir, { recursive: true });
+      fs.writeFileSync(path.join(outDir, 'scenarios.json'), JSON.stringify({ scenarios }, null, 2), 'utf8');
+      console.log('Wrote frontend/public/scenarios.json');
+      process.exit(0);
     });
-    server.on('error', (err) => {
-      if (err.code === 'EADDRINUSE') {
-        server.close(() => {});
-        portIndex++;
-        const nextPort = portsToTry[portIndex] ?? port + 1;
-        console.log(`Port ${port} is in use, trying ${nextPort}...`);
-        tryListen(nextPort);
-      } else {
-        console.error('Server error:', err);
-      }
-    });
-  }
+  });
+  // startServer nicht aufrufen
+} else {
+  // Start server with port fallback (probiert mehrere Ports bis einer frei ist)
+  const startServer = async () => {
+    const portsToTry = [PORT, 4001, 40011, 40012, 40013, 40014, 40015, 40016, 40017, 40018];
+    let portIndex = 0;
 
-  tryListen(portsToTry[0]);
-};
+    function tryListen(port) {
+      const server = app.listen(port, async () => {
+        console.log(`Backend listening on http://localhost:${server.address().port}`);
+        await initializeDatabase();
+      });
+      server.on('error', (err) => {
+        if (err.code === 'EADDRINUSE') {
+          server.close(() => {});
+          portIndex++;
+          const nextPort = portsToTry[portIndex] ?? port + 1;
+          console.log(`Port ${port} is in use, trying ${nextPort}...`);
+          tryListen(nextPort);
+        } else {
+          console.error('Server error:', err);
+        }
+      });
+    }
 
-startServer();
+    tryListen(portsToTry[0]);
+  };
+
+  startServer();
+}
 
 
