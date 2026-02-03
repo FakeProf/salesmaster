@@ -6,6 +6,25 @@
 [build.environment]
   NODE_VERSION = "18.19.0"
 
+# Backend-Function: längeres Timeout für DB/API
+[functions]
+  node_bundler = "esbuild"
+[functions.server]
+  timeout = 26
+
+# API und Auth an Express-Backend (Netlify Function) weiterleiten – vor dem Catch-all
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/server"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/auth/*"
+  to = "/.netlify/functions/server"
+  status = 200
+  force = true
+
 [[redirects]]
   from = "/.netlify/functions/*"
   to = "/.netlify/functions/:splat"

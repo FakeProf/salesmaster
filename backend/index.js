@@ -112,30 +112,45 @@ async function initializeDatabase() {
 //   ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
 // });
 
-const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
+const FRONTEND_URL = process.env.FRONTEND_URL || process.env.URL || 'http://localhost:5173';
 
 app.use(cors({
   origin: [
     FRONTEND_URL,
+    process.env.URL,
     'http://localhost:5173', 'http://localhost:5174', 'http://localhost:5175', 'http://localhost:5176', 'http://localhost:5177',
     'http://127.0.0.1:5173', 'http://127.0.0.1:5174', 'http://127.0.0.1:5175', 'http://127.0.0.1:5176', 'http://127.0.0.1:5177',
-    /^http:\/\/localhost(:\d+)?$/, /^http:\/\/127\.0\.0\.1(:\d+)?$/
-  ],
+    /^http:\/\/localhost(:\d+)?$/, /^http:\/\/127\.0\.0\.1(:\d+)?$/, /^https:\/\/[a-z0-9-]+\.netlify\.app$/
+  ].filter(Boolean),
   credentials: true,
 }));
 app.use(cookieParser());
 app.use(express.json());
-app.use(session({
-  secret: process.env.SESSION_SECRET || 'salesmaster-dev-secret-change-in-production',
-  resave: false,
-  saveUninitialized: false,
-  cookie: {
+const sessionSecret = process.env.SESSION_SECRET || 'salesmaster-dev-secret-change-in-production';
+const isNetlify = process.env.NETLIFY === 'true' || process.env.NETLIFY === true;
+if (isNetlify) {
+  const cookieSession = (await import('cookie-session')).default;
+  app.use(cookieSession({
+    name: 'session',
+    keys: [sessionSecret],
+    maxAge: 7 * 24 * 60 * 60 * 1000,
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
-    maxAge: 7 * 24 * 60 * 60 * 1000,
-    sameSite: process.env.NODE_ENV === 'production' ? 'lax' : 'lax',
-  },
-}));
+    sameSite: 'lax',
+  }));
+} else {
+  app.use(session({
+    secret: sessionSecret,
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+      sameSite: 'lax',
+    },
+  }));
+}
 
 // --- E-Mail/Passwort-Anmeldung (kostenlos, nur eigene DB) ---
 function hashPassword(password) {
@@ -167,10 +182,14 @@ app.post('/auth/register', async (req, res) => {
     `;
     const [user] = await sql`SELECT id, email, name FROM users WHERE email = ${trimmedEmail}`;
     req.session.user = { id: String(user.id), email: user.email, name: user.name || user.email };
-    req.session.save((err) => {
-      if (err) return res.status(500).json({ error: 'Session konnte nicht gespeichert werden.' });
+    if (typeof req.session.save === 'function') {
+      req.session.save((err) => {
+        if (err) return res.status(500).json({ error: 'Session konnte nicht gespeichert werden.' });
+        res.status(201).json({ user: req.session.user });
+      });
+    } else {
       res.status(201).json({ user: req.session.user });
-    });
+    }
   } catch (e) {
     if (e.code === '23505') {
       return res.status(409).json({ error: 'Diese E-Mail-Adresse ist bereits registriert.' });
@@ -199,10 +218,14 @@ app.post('/auth/login', async (req, res) => {
       return res.status(401).json({ error: 'E-Mail oder Passwort falsch.' });
     }
     req.session.user = { id: String(user.id), email: user.email, name: user.name || user.email };
-    req.session.save((err) => {
-      if (err) return res.status(500).json({ error: 'Session konnte nicht gespeichert werden.' });
+    if (typeof req.session.save === 'function') {
+      req.session.save((err) => {
+        if (err) return res.status(500).json({ error: 'Session konnte nicht gespeichert werden.' });
+        res.json({ user: req.session.user });
+      });
+    } else {
       res.json({ user: req.session.user });
-    });
+    }
   } catch (e) {
     console.error('Login error:', e);
     res.status(500).json({ error: 'Anmeldung fehlgeschlagen.' });
@@ -1537,8 +1560,13 @@ app.get('/api/insights/me', async (req, res) => {
   }
 });
 
-// Optional: Szenarien als JSON für Frontend-Fallback (Live ohne Backend) exportieren
-// Aufruf: WRITE_SCENARIOS_JSON=1 node backend/index.js
+if (isNetlify) {
+  await initializeDatabase();
+}
+
+export { app };
+
+// Optional: Szenarien als JSON exportieren. Aufruf: WRITE_SCENARIOS_JSON=1 node backend/index.js
 if (process.env.WRITE_SCENARIOS_JSON) {
   import('fs').then((fs) => {
     import('path').then((path) => {
@@ -1549,13 +1577,11 @@ if (process.env.WRITE_SCENARIOS_JSON) {
       process.exit(0);
     });
   });
-  // startServer nicht aufrufen
-} else {
-  // Start server with port fallback (probiert mehrere Ports bis einer frei ist)
+} else if (!isNetlify) {
+  // Lokal: Server starten (bei Netlify wird die App als Function verwendet)
   const startServer = async () => {
     const portsToTry = [PORT, 4001, 40011, 40012, 40013, 40014, 40015, 40016, 40017, 40018];
     let portIndex = 0;
-
     function tryListen(port) {
       const server = app.listen(port, async () => {
         console.log(`Backend listening on http://localhost:${server.address().port}`);
@@ -1565,18 +1591,14 @@ if (process.env.WRITE_SCENARIOS_JSON) {
         if (err.code === 'EADDRINUSE') {
           server.close(() => {});
           portIndex++;
-          const nextPort = portsToTry[portIndex] ?? port + 1;
-          console.log(`Port ${port} is in use, trying ${nextPort}...`);
-          tryListen(nextPort);
+          tryListen(portsToTry[portIndex] ?? port + 1);
         } else {
           console.error('Server error:', err);
         }
       });
     }
-
     tryListen(portsToTry[0]);
   };
-
   startServer();
 }
 

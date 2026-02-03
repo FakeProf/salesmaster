@@ -30,7 +30,7 @@ export function AuthProvider({ children }) {
 
   const authErrorMessage = (isLive = false) =>
     isLive
-      ? 'Backend nicht erreichbar. In der Live-Version muss die Backend-URL (VITE_API_URL) gesetzt sein.'
+      ? 'Backend nicht erreichbar. Anmeldung/Registrierung funktionieren nur, wenn ein Backend läuft und in den Build-Einstellungen die Variable VITE_API_URL auf die Backend-URL gesetzt ist.'
       : 'Server nicht erreichbar. Läuft das Backend (z. B. npm run dev im Backend-Ordner)?';
 
   const loginWithEmail = async (email, password) => {
