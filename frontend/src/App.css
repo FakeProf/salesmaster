@@ -83,6 +83,172 @@ body {
   box-shadow: 0 4px 15px rgba(74, 85, 104, 0.3);
 }
 
+/* Header Auth */
+.header-auth {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+.header-user {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  color: #a0aec0;
+  font-size: 0.95rem;
+}
+.header-user-name {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.btn-auth {
+  padding: 0.5rem 1rem;
+  background: linear-gradient(135deg, #4a5568, #2d3748);
+  color: #e2e8f0;
+  border: 1px solid #4a5568;
+  border-radius: 6px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.btn-auth:hover {
+  background: linear-gradient(135deg, #5a6578, #3d4858);
+  border-color: #5a6578;
+}
+/* Auth Modal (E-Mail/Passwort) */
+.auth-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  min-height: 100vh;
+  min-height: 100dvh;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6rem 2rem 2rem 2rem;
+  z-index: 10000;
+  overflow-y: auto;
+  isolation: isolate;
+}
+.auth-modal {
+  background: #2d3748;
+  border-radius: 12px;
+  padding: 1.5rem 2rem;
+  min-width: 320px;
+  max-width: 400px;
+  position: relative;
+  z-index: 1;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+  margin: auto;
+}
+.auth-modal-close {
+  position: absolute;
+  top: 0.75rem;
+  right: 1rem;
+  background: none;
+  border: none;
+  color: #a0aec0;
+  font-size: 1.5rem;
+  cursor: pointer;
+  line-height: 1;
+}
+.auth-modal-close:hover {
+  color: #e2e8f0;
+}
+.auth-modal-tabs {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1.25rem;
+}
+.auth-modal-tabs button {
+  flex: 1;
+  padding: 0.5rem 1rem;
+  background: #4a5568;
+  border: none;
+  border-radius: 6px;
+  color: #a0aec0;
+  cursor: pointer;
+  font-weight: 500;
+}
+.auth-modal-tabs button.active {
+  background: #81c784;
+  color: #1a202c;
+}
+.auth-modal-error {
+  background: rgba(229, 62, 62, 0.2);
+  color: #feb2b2;
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  margin-bottom: 1rem;
+}
+.auth-modal-form input {
+  width: 100%;
+  padding: 0.6rem 0.75rem;
+  margin-bottom: 0.75rem;
+  background: #1a202c;
+  border: 1px solid #4a5568;
+  border-radius: 6px;
+  color: #e2e8f0;
+  font-size: 1rem;
+}
+.auth-modal-form input::placeholder {
+  color: #718096;
+}
+.auth-modal-form .btn-primary {
+  width: 100%;
+  padding: 0.65rem;
+  margin-top: 0.25rem;
+  background: #81c784;
+  color: #1a202c;
+  border: none;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.auth-modal-form .btn-primary:hover:not(:disabled) {
+  background: #a7f3d0;
+}
+.auth-modal-form .btn-primary:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+.auth-modal-divider {
+  text-align: center;
+  color: #718096;
+  font-size: 0.9rem;
+  margin: 1.25rem 0 1rem;
+}
+.auth-modal-ms {
+  width: 100%;
+  justify-content: center;
+}
+.btn-logout {
+  padding: 0.4rem 0.8rem;
+  font-size: 0.9rem;
+  background: transparent;
+  color: #a0aec0;
+  border: 1px solid #4a5568;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.btn-logout:hover {
+  color: #e2e8f0;
+  border-color: #718096;
+}
+.auth-error-banner {
+  background: rgba(229, 62, 62, 0.2);
+  color: #feb2b2;
+  padding: 0.5rem 2rem;
+  text-align: center;
+  font-size: 0.9rem;
+}
+
 /* Main Content */
 .main-content {
   flex: 1;
@@ -494,6 +660,59 @@ body {
   backdrop-filter: blur(10px);
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
   border: 1px solid rgba(74, 85, 104, 0.3);
+}
+
+.progress-login-gate {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 280px;
+  margin-top: 2rem;
+}
+
+.progress-login-card {
+  background: linear-gradient(135deg, #4a5568, #2d3748);
+  border-radius: 12px;
+  padding: 2.5rem;
+  max-width: 420px;
+  text-align: center;
+  border: 1px solid rgba(74, 85, 104, 0.5);
+}
+
+.progress-login-icon {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+}
+
+.progress-login-card h3 {
+  color: #e2e8f0;
+  margin-bottom: 0.75rem;
+}
+
+.progress-login-card p {
+  color: #a0aec0;
+  margin-bottom: 1.5rem;
+  line-height: 1.5;
+}
+
+.progress-login-card .btn-primary {
+  padding: 0.75rem 1.5rem;
+  background: #81c784;
+  color: #1a202c;
+  border: none;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.progress-login-card .btn-primary:hover {
+  background: #a7f3d0;
+}
+
+.activity-empty {
+  color: #718096;
+  font-style: italic;
+  padding: 1rem 0;
 }
 
 .progress-stats {
@@ -1391,10 +1610,20 @@ body {
   font-size: 0.9rem;
 }
 
-.recommendation {
+.recommendation,
+.insight-recommendation {
   color: #a0aec0;
   margin-top: 1rem;
   line-height: 1.6;
+}
+
+.insights-empty,
+.insights-loading {
+  color: #a0aec0;
+  text-align: center;
+  padding: 2rem;
+  max-width: 480px;
+  margin: 2rem auto 0;
 }
 
 @media (max-width: 480px) {

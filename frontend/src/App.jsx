@@ -1,9 +1,26 @@
-import React from 'react'
-import { Routes, Route, NavLink } from 'react-router-dom'
+import React, { useEffect, useState } from 'react'
+import { Routes, Route, NavLink, useSearchParams } from 'react-router-dom'
+import { useAuth } from './AuthContext'
+import { apiFetch } from './api'
+import AuthModal from './AuthModal'
 import EmailChecker from './EmailChecker'
 import './App.css'
 
 function Layout({ children }) {
+  const { user, loading, logout, refreshUser, showAuthModal, setShowAuthModal } = useAuth()
+  const [searchParams, setSearchParams] = useSearchParams()
+
+  useEffect(() => {
+    if (searchParams.get('logged_in') === '1') {
+      refreshUser()
+      setSearchParams((prev) => {
+        const p = new URLSearchParams(prev)
+        p.delete('logged_in')
+        return p
+      }, { replace: true })
+    }
+  }, [refreshUser, searchParams, setSearchParams])
+
   return (
     <div className="app-container">
       <header className="app-header">
@@ -18,7 +35,29 @@ function Layout({ children }) {
             <NavLink to="/progress" className="nav-tab">Fortschritt</NavLink>
             <NavLink to="/email-check" className="nav-tab">E-Mail-Prüfung</NavLink>
           </nav>
+          <div className="header-auth">
+            {!loading && (
+              user ? (
+                <span className="header-user">
+                  <span className="header-user-name">{user.name || user.email}</span>
+                  <button type="button" className="btn btn-outline btn-logout" onClick={logout}>Abmelden</button>
+                </span>
+              ) : (
+                <>
+                  <button type="button" className="btn btn-auth" onClick={() => setShowAuthModal(true)}>
+                    Anmelden
+                  </button>
+                  {showAuthModal && <AuthModal onClose={() => setShowAuthModal(false)} />}
+                </>
+              )
+            )}
+          </div>
         </div>
+        {searchParams.get('auth_error') && (
+          <div className="auth-error-banner">
+            Anmeldung fehlgeschlagen. Bitte erneut versuchen.
+          </div>
+        )}
       </header>
       <main className="main-content">{children}</main>
       <footer className="modern-footer">
@@ -39,7 +78,7 @@ function Layout({ children }) {
             <NavLink to="/cookies">Cookies</NavLink>
           </div>
           <div className="footer-section">
-            <p>&copy; 2025 SalesMaster. Alle Rechte vorbehalten.</p>
+            <p>&copy; 2026 SalesMaster. Alle Rechte vorbehalten.</p>
           </div>
         </div>
       </footer>
@@ -85,6 +124,7 @@ function Home() {
 }
 
 function Training() {
+  const { user } = useAuth()
   const [activeModule, setActiveModule] = React.useState(null)
   const [currentQuestionIndex, setCurrentQuestionIndex] = React.useState(0)
   const [selectedAnswer, setSelectedAnswer] = React.useState(null)
@@ -661,13 +701,28 @@ function Training() {
     } else if (activeModule === 'sales-language') {
       currentQuestions = salesLanguageQuestions
     }
-    
+    const question = currentQuestions[currentQuestionIndex]
+    const correctOption = question?.options?.find(opt => opt.correct)
+    const correct = correctOption && selectedAnswer !== null && correctOption.id === selectedAnswer
+
+    if (user && activeModule && selectedAnswer !== null) {
+      apiFetch('/api/insights/answer', {
+        method: 'POST',
+        body: JSON.stringify({ moduleId: activeModule, questionId: question?.id, correct })
+      }).catch(() => {})
+    }
+
     if (currentQuestionIndex < currentQuestions.length - 1) {
       setCurrentQuestionIndex(currentQuestionIndex + 1)
       setSelectedAnswer(null)
       setShowNextButton(false)
     } else {
-      // Alle Fragen beantwortet - zurück zu Trainings
+      if (user && activeModule) {
+        apiFetch('/api/training-complete', {
+          method: 'POST',
+          body: JSON.stringify({ moduleId: activeModule })
+        }).catch(() => {})
+      }
       setActiveModule(null)
       setCurrentQuestionIndex(0)
       setSelectedAnswer(null)
@@ -806,9 +861,12 @@ function Training() {
 }
 
 function Practice() {
+  const { user, setShowAuthModal } = useAuth()
   const [activeMode, setActiveMode] = React.useState(null)
   const [activeTopic, setActiveTopic] = React.useState(null)
-  
+  const [insightsData, setInsightsData] = React.useState([])
+  const [insightsLoading, setInsightsLoading] = React.useState(false)
+
   // Adaptives Quiz State
   const [quizQuestionIndex, setQuizQuestionIndex] = React.useState(0)
   const [quizAnswer, setQuizAnswer] = React.useState(null)
@@ -2946,14 +3004,24 @@ function Practice() {
     ]
   }
   
-  // Lern-Insights Daten
-  const learningInsights = {
-    performance: [
-      { area: 'Einwandbehandlung', score: 65, recommendation: 'Wiederhole Modul "Preis-Einwände" in 2 Tagen' },
-      { area: 'Fragetechniken', score: 90, recommendation: 'Weiter mit "Funnel-Fragen – Fortgeschritten"' },
-      { area: 'Verkaufspsychologie', score: 80, recommendation: 'Fokus auf "Reziprozität in B2B"' }
-    ]
-  }
+  // Lern-Insights: echte Daten laden wenn Nutzer „Insights anzeigen“ öffnet
+  React.useEffect(() => {
+    if (activeMode !== 'insights' || !user) {
+      setInsightsData([])
+      return
+    }
+    setInsightsLoading(true)
+    apiFetch('/api/insights/me')
+      .then(r => r.ok ? r.json() : { insights: [] })
+      .then(data => {
+        setInsightsData(data.insights || [])
+        setInsightsLoading(false)
+      })
+      .catch(() => {
+        setInsightsData([])
+        setInsightsLoading(false)
+      })
+  }, [activeMode, user])
 
   // Handler Functions
   const startAdaptiveQuiz = (topic) => {
@@ -2975,6 +3043,13 @@ function Practice() {
   }
 
   const handleNextQuizQuestion = () => {
+    if (user && quizAnswer !== null) {
+      const moduleId = activeTopic === 'Einwände' ? 'practice-quiz-einwaende' : 'practice-quiz-fragen'
+      apiFetch('/api/insights/answer', {
+        method: 'POST',
+        body: JSON.stringify({ moduleId, questionId: quizQuestionIndex, correct: quizAnswer?.correct })
+      }).catch(() => {})
+    }
     if (quizQuestionIndex < adaptiveQuizQuestions[activeTopic].length - 1) {
       setQuizQuestionIndex(quizQuestionIndex + 1)
       setQuizAnswer(null)
@@ -2996,6 +3071,13 @@ function Practice() {
 
   const handleFlashcardRating = (rating) => {
     setFlashcardRating(rating)
+    if (user) {
+      const correct = rating !== 'Schwer'
+      apiFetch('/api/insights/answer', {
+        method: 'POST',
+        body: JSON.stringify({ moduleId: 'practice-flashcards', questionId: flashcardIndex, correct })
+      }).catch(() => {})
+    }
     // Schwierige Karten werden häufiger wiederholt
     if (rating === 'Schwer' && flashcardIndex < flashcards.length - 1) {
       // Karte bleibt im Pool
@@ -3022,6 +3104,12 @@ function Practice() {
   }
 
   const handleNextRoleplayScenario = () => {
+    if (user && roleplayAnswer !== null) {
+      apiFetch('/api/insights/answer', {
+        method: 'POST',
+        body: JSON.stringify({ moduleId: 'practice-rollenspiel', questionId: roleplayScenarioIndex, correct: roleplayAnswer?.correct })
+      }).catch(() => {})
+    }
     if (roleplayScenarioIndex < roleplayScenarios.length - 1) {
       setRoleplayScenarioIndex(roleplayScenarioIndex + 1)
       setRoleplayAnswer(null)
@@ -3094,6 +3182,13 @@ function Practice() {
   }
 
   const handleNextMicroStory = () => {
+    if (user && microAnswer !== null) {
+      const moduleId = activeTopic === 'objection_handling' ? 'practice-micro-einwaende' : 'practice-micro-spin'
+      apiFetch('/api/insights/answer', {
+        method: 'POST',
+        body: JSON.stringify({ moduleId, questionId: microStoryIndex, correct: microAnswer?.correct })
+      }).catch(() => {})
+    }
     if (microStoryIndex < microStories[activeTopic].length - 1) {
       setMicroStoryIndex(microStoryIndex + 1)
       setMicroAnswer(null)
@@ -3333,21 +3428,37 @@ function Practice() {
           <h2>Lern-Insights</h2>
           <p>Personalisiertes Feedback und Empfehlungen</p>
         </div>
-        <div className="insights-container">
-          <div className="insights-grid">
-            {learningInsights.performance.map((item, idx) => (
-              <div key={idx} className="insight-card">
-                <h3>{item.area}</h3>
-                <div className="performance-bar">
-                  <div className="performance-fill" style={{ width: `${item.score}%` }}></div>
-                  <span className="performance-score">{item.score}%</span>
-                </div>
-                <p className="recommendation"><strong>Empfehlung:</strong> {item.recommendation}</p>
-              </div>
-
-            ))}
+        {!user ? (
+          <div className="progress-login-gate">
+            <div className="progress-login-card">
+              <div className="progress-login-icon">📊</div>
+              <h3>Anmeldung erforderlich</h3>
+              <p>Melde dich an, um zu sehen, in welchen Bereichen du die häufigsten Fehler machst und welche Module du wiederholen solltest.</p>
+              <button type="button" className="btn btn-primary" onClick={() => setShowAuthModal(true)}>
+                Anmelden
+              </button>
+            </div>
           </div>
-        </div>
+        ) : insightsLoading ? (
+          <p className="insights-loading">Lade Lern-Insights…</p>
+        ) : insightsData.length === 0 ? (
+          <p className="insights-empty">Noch keine Antworten im Vertriebs-Training. Beantworte Fragen in den Trainingsmodulen, damit hier deine Stärken und Schwächen angezeigt werden.</p>
+        ) : (
+          <div className="insights-container">
+            <div className="insights-grid">
+              {insightsData.map((item) => (
+                <div key={item.moduleId} className="insight-card">
+                  <h3>{item.title}</h3>
+                  <div className="performance-bar">
+                    <div className="performance-fill" style={{ width: `${item.percentageCorrect}%` }} />
+                    <span className="performance-score">{item.percentageCorrect}%</span>
+                  </div>
+                  <p className="insight-recommendation">Empfehlung: {item.recommendation}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     )
   }
@@ -3439,6 +3550,7 @@ function Practice() {
 }
 
 function Scenarios() {
+  const { user } = useAuth()
   const [scenarios, setScenarios] = React.useState([])
   const [filteredScenarios, setFilteredScenarios] = React.useState([])
   const [selectedIndustry, setSelectedIndustry] = React.useState('all')
@@ -3464,7 +3576,7 @@ function Scenarios() {
 
   React.useEffect(() => {
     setLoading(true)
-    fetch('http://localhost:4001/api/scenarios')
+    apiFetch('/api/scenarios')
       .then(r => {
         if (!r.ok) {
           throw new Error(`HTTP error! status: ${r.status}`)
@@ -3575,7 +3687,18 @@ function Scenarios() {
   }
 
   const finishScenario = () => {
-    alert(`Szenario abgeschlossen! Dein Score: ${score} Punkte`)
+    const finalScore = score
+    if (user && activeScenario?.id != null && typeof activeScenario.id === 'number') {
+      apiFetch('/api/progress', {
+        method: 'POST',
+        body: JSON.stringify({
+          scenarioId: activeScenario.id,
+          completed: true,
+          score: finalScore
+        })
+      }).catch(() => {})
+    }
+    alert(`Szenario abgeschlossen! Dein Score: ${finalScore} Punkte`)
     setActiveScenario(null)
     setCurrentPhaseIndex(0)
     setCurrentTaskIndex(0)
@@ -3821,30 +3944,101 @@ function Scenarios() {
   )
 }
 
-function Progress() {
-  const [userProgress, setUserProgress] = React.useState({
-    completedTrainings: 2,
-    totalTrainings: 4,
-    completedScenarios: 3,
-    totalScenarios: 6,
-    currentStreak: 5,
-    totalXP: 1250,
-    level: 3,
-    achievements: [
-      { id: 1, name: 'Erste Schritte', description: 'Erstes Training abgeschlossen', earned: true },
-      { id: 2, name: 'Einwand-Profi', description: '10 Einwände erfolgreich behandelt', earned: true },
-      { id: 3, name: 'Fragen-Meister', description: 'SPIN-Selling gemeistert', earned: false },
-      { id: 4, name: 'Szenario-Champion', description: 'Alle Szenarien durchgespielt', earned: false }
-    ],
-    recentActivity: [
-      { date: '2025-01-15', activity: 'Einwandbehandlung-Training abgeschlossen', xp: 150 },
-      { date: '2025-01-14', activity: 'Buchhaltung-Szenario gemeistert', xp: 200 },
-      { date: '2025-01-13', activity: 'Fragetechniken-Quiz bestanden', xp: 100 }
-    ]
-  })
+const TRAINING_MODULE_NAMES = {
+  'objection-handling': 'Einwandbehandlung',
+  'question-techniques': 'Fragetechniken',
+  'sales-psychology': 'Verkaufspsychologie',
+  'sales-language': 'Verkaufssprache'
+}
+const TOTAL_TRAINING_MODULES = 4
 
-  const trainingProgress = (userProgress.completedTrainings / userProgress.totalTrainings) * 100
-  const scenarioProgress = (userProgress.completedScenarios / userProgress.totalScenarios) * 100
+function Progress() {
+  const { user, loading: authLoading, setShowAuthModal } = useAuth()
+  const [progressData, setProgressData] = React.useState(null)
+  const [loading, setLoading] = React.useState(true)
+
+  React.useEffect(() => {
+    if (!user) {
+      setProgressData(null)
+      setLoading(false)
+      return
+    }
+    setLoading(true)
+    apiFetch('/api/progress/me')
+      .then(r => r.ok ? r.json() : { progress: [], trainingActivity: [], totalScenarios: 0 })
+      .then(data => {
+        setProgressData(data)
+        setLoading(false)
+      })
+      .catch(() => {
+        setProgressData({ progress: [], trainingActivity: [], totalScenarios: 0 })
+        setLoading(false)
+      })
+  }, [user])
+
+  if (authLoading || (user && loading)) {
+    return (
+      <div className="progress-container">
+        <div className="section-header">
+          <p>Lade Fortschritt…</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!user) {
+    return (
+      <div className="progress-container">
+        <div className="section-header">
+          <h2>Fortschritt</h2>
+          <p>Melde dich an, um deinen Fortschritt zu speichern und Erfolge zu sammeln.</p>
+        </div>
+        <div className="progress-login-gate">
+          <div className="progress-login-card">
+            <div className="progress-login-icon">📊</div>
+            <h3>Anmeldung erforderlich</h3>
+            <p>Hier siehst du, welche Trainings und Szenarien du abgeschlossen hast, wann du sie gemacht hast und welche Erfolge du freischalten kannst.</p>
+            <button type="button" className="btn btn-primary" onClick={() => setShowAuthModal(true)}>
+              Anmelden
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  const progress = progressData?.progress || []
+  const trainingActivity = progressData?.trainingActivity || []
+  const totalScenarios = Math.max(progressData?.totalScenarios ?? 0, 1)
+  const completedScenarios = progress.filter(p => p.completed).length
+  const completedTrainings = trainingActivity.length
+  const totalXP = completedScenarios * 100 + completedTrainings * 50
+  const level = Math.floor(totalXP / 500) + 1
+  const trainingProgressPct = (completedTrainings / TOTAL_TRAINING_MODULES) * 100
+  const scenarioProgressPct = totalScenarios > 0 ? (completedScenarios / totalScenarios) * 100 : 0
+
+  const achievements = [
+    { id: 1, name: 'Erste Schritte', description: 'Erstes Training abgeschlossen', earned: completedTrainings >= 1 },
+    { id: 2, name: 'Einwand-Profi', description: 'Einwandbehandlung-Training abgeschlossen', earned: trainingActivity.some(t => t.module_id === 'objection-handling') },
+    { id: 3, name: 'Fragen-Meister', description: 'Fragetechniken-Training abgeschlossen', earned: trainingActivity.some(t => t.module_id === 'question-techniques') },
+    { id: 4, name: 'Szenario-Champion', description: 'Alle Szenarien durchgespielt', earned: totalScenarios > 0 && completedScenarios >= totalScenarios },
+    { id: 5, name: 'Vollständiger Lehrplan', description: 'Alle 4 Trainingsmodule abgeschlossen', earned: completedTrainings >= TOTAL_TRAINING_MODULES }
+  ]
+
+  const recentActivity = [
+    ...progress.filter(p => p.completed_at).map(p => ({
+      at: new Date(p.completed_at).getTime(),
+      date: new Date(p.completed_at).toLocaleDateString('de-DE'),
+      activity: `${p.title || 'Szenario'} abgeschlossen`,
+      xp: (p.score || 0) || 100
+    })),
+    ...trainingActivity.map(t => ({
+      at: t.completed_at ? new Date(t.completed_at).getTime() : 0,
+      date: t.completed_at ? new Date(t.completed_at).toLocaleDateString('de-DE') : '',
+      activity: `${TRAINING_MODULE_NAMES[t.module_id] || t.module_id}-Training abgeschlossen`,
+      xp: 50
+    }))
+  ].sort((a, b) => b.at - a.at).slice(0, 10)
 
   return (
     <div className="progress-container">
@@ -3857,28 +4051,21 @@ function Progress() {
         <div className="stat-card">
           <div className="stat-icon">🏆</div>
           <div className="stat-content">
-            <h3>Level {userProgress.level}</h3>
-            <p>{userProgress.totalXP} XP</p>
-          </div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-icon">🔥</div>
-          <div className="stat-content">
-            <h3>{userProgress.currentStreak} Tage</h3>
-            <p>Lernstreak</p>
+            <h3>Level {level}</h3>
+            <p>{totalXP} XP</p>
           </div>
         </div>
         <div className="stat-card">
           <div className="stat-icon">📚</div>
           <div className="stat-content">
-            <h3>{userProgress.completedTrainings}/{userProgress.totalTrainings}</h3>
+            <h3>{completedTrainings}/{TOTAL_TRAINING_MODULES}</h3>
             <p>Trainings abgeschlossen</p>
           </div>
         </div>
         <div className="stat-card">
           <div className="stat-icon">🎯</div>
           <div className="stat-content">
-            <h3>{userProgress.completedScenarios}/{userProgress.totalScenarios}</h3>
+            <h3>{completedScenarios}/{totalScenarios}</h3>
             <p>Szenarien gemeistert</p>
           </div>
         </div>
@@ -3888,24 +4075,23 @@ function Progress() {
         <div className="progress-section">
           <h3>Training-Fortschritt</h3>
           <div className="progress-bar">
-            <div className="progress-fill" style={{ width: `${trainingProgress}%` }}></div>
+            <div className="progress-fill" style={{ width: `${trainingProgressPct}%` }}></div>
           </div>
-          <p>{userProgress.completedTrainings} von {userProgress.totalTrainings} Trainings abgeschlossen</p>
+          <p>{completedTrainings} von {TOTAL_TRAINING_MODULES} Trainings abgeschlossen</p>
         </div>
-
         <div className="progress-section">
           <h3>Szenario-Fortschritt</h3>
           <div className="progress-bar">
-            <div className="progress-fill" style={{ width: `${scenarioProgress}%` }}></div>
+            <div className="progress-fill" style={{ width: `${scenarioProgressPct}%` }}></div>
           </div>
-          <p>{userProgress.completedScenarios} von {userProgress.totalScenarios} Szenarien gemeistert</p>
+          <p>{completedScenarios} von {totalScenarios} Szenarien gemeistert</p>
         </div>
       </div>
 
       <div className="achievements-section">
         <h3>Erfolge</h3>
         <div className="achievements-grid">
-          {userProgress.achievements.map(achievement => (
+          {achievements.map(achievement => (
             <div key={achievement.id} className={`achievement-card ${achievement.earned ? 'earned' : 'locked'}`}>
               <div className="achievement-icon">
                 {achievement.earned ? '🏆' : '🔒'}
@@ -3922,13 +4108,17 @@ function Progress() {
       <div className="activity-section">
         <h3>Letzte Aktivitäten</h3>
         <div className="activity-list">
-          {userProgress.recentActivity.map((activity, idx) => (
-            <div key={idx} className="activity-item">
-              <div className="activity-date">{activity.date}</div>
-              <div className="activity-description">{activity.activity}</div>
-              <div className="activity-xp">+{activity.xp} XP</div>
-            </div>
-          ))}
+          {recentActivity.length === 0 ? (
+            <p className="activity-empty">Noch keine Aktivitäten. Starte ein Training oder ein Szenario!</p>
+          ) : (
+            recentActivity.map((activity, idx) => (
+              <div key={idx} className="activity-item">
+                <div className="activity-date">{activity.date}</div>
+                <div className="activity-description">{activity.activity}</div>
+                <div className="activity-xp">+{activity.xp} XP</div>
+              </div>
+            ))
+          )}
         </div>
       </div>
     </div>
@@ -3949,7 +4139,7 @@ function Kontakt() {
           <div className="contact-item">
             <h4>E-Mail</h4>
             <p>
-              <a href="mailto:info@salesmaster.de" className="email-link">info@salesmaster.de</a>
+              <a href="mailto:mail@juliansteiner.de" className="email-link">mail@juliansteiner.de</a>
             </p>
           </div>
         </div>
@@ -4182,7 +4372,7 @@ function Cookies() {
         <h3>Weitere Informationen</h3>
         <p>
           Wenn Sie Fragen zu unserer Verwendung von Cookies haben, kontaktieren Sie uns bitte unter 
-          info@salesmaster.de.
+          mail@juliansteiner.de.
         </p>
       </div>
     </div>

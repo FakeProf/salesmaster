@@ -1,5 +1,15 @@
+import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+dotenv.config({ path: path.join(__dirname, '.env') });
+
+import crypto from 'crypto';
 import express from 'express';
 import cors from 'cors';
+import session from 'express-session';
+import cookieParser from 'cookie-parser';
 import { neon } from '@neondatabase/serverless';
 
 const app = express();
@@ -41,16 +51,52 @@ async function initializeDatabase() {
       )
     `;
     
+    // Create users table (E-Mail/Passwort-Anmeldung)
+    await sql`
+      CREATE TABLE IF NOT EXISTS users (
+        id SERIAL PRIMARY KEY,
+        email VARCHAR(255) UNIQUE NOT NULL,
+        password_hash VARCHAR(255) NOT NULL,
+        name VARCHAR(255),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `;
+    
     // Create user_progress table if it doesn't exist
     await sql`
       CREATE TABLE IF NOT EXISTS user_progress (
         id SERIAL PRIMARY KEY,
         user_id VARCHAR(255) NOT NULL,
-        scenario_id INTEGER REFERENCES scenarios(id),
+        scenario_id INTEGER NOT NULL,
         completed BOOLEAN DEFAULT FALSE,
         score INTEGER DEFAULT 0,
         completed_at TIMESTAMP,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `;
+    try {
+      await sql`CREATE UNIQUE INDEX IF NOT EXISTS user_progress_user_scenario_key ON user_progress (user_id, scenario_id)`;
+    } catch (_) {}
+    
+    await sql`
+      CREATE TABLE IF NOT EXISTS user_training_activity (
+        id SERIAL PRIMARY KEY,
+        user_id VARCHAR(255) NOT NULL,
+        module_id VARCHAR(100) NOT NULL,
+        completed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(user_id, module_id)
+      )
+    `;
+
+    await sql`
+      CREATE TABLE IF NOT EXISTS user_question_stats (
+        id SERIAL PRIMARY KEY,
+        user_id VARCHAR(255) NOT NULL,
+        module_id VARCHAR(100) NOT NULL,
+        correct_answers INTEGER DEFAULT 0,
+        total_answers INTEGER DEFAULT 0,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(user_id, module_id)
       )
     `;
     
@@ -66,8 +112,117 @@ async function initializeDatabase() {
 //   ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
 // });
 
-app.use(cors());
+const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
+
+app.use(cors({
+  origin: [
+    FRONTEND_URL,
+    'http://localhost:5173', 'http://localhost:5174', 'http://localhost:5175', 'http://localhost:5176', 'http://localhost:5177',
+    'http://127.0.0.1:5173', 'http://127.0.0.1:5174', 'http://127.0.0.1:5175', 'http://127.0.0.1:5176', 'http://127.0.0.1:5177',
+    /^http:\/\/localhost(:\d+)?$/, /^http:\/\/127\.0\.0\.1(:\d+)?$/
+  ],
+  credentials: true,
+}));
+app.use(cookieParser());
 app.use(express.json());
+app.use(session({
+  secret: process.env.SESSION_SECRET || 'salesmaster-dev-secret-change-in-production',
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+    sameSite: process.env.NODE_ENV === 'production' ? 'lax' : 'lax',
+  },
+}));
+
+// --- E-Mail/Passwort-Anmeldung (kostenlos, nur eigene DB) ---
+function hashPassword(password) {
+  const salt = crypto.randomBytes(16).toString('hex');
+  const hash = crypto.pbkdf2Sync(password, salt, 100000, 64, 'sha512').toString('hex');
+  return `${salt}:${hash}`;
+}
+function verifyPassword(password, stored) {
+  const [salt, hash] = stored.split(':');
+  if (!salt || !hash) return false;
+  const computed = crypto.pbkdf2Sync(password, salt, 100000, 64, 'sha512').toString('hex');
+  return crypto.timingSafeEqual(Buffer.from(hash, 'hex'), Buffer.from(computed, 'hex'));
+}
+
+app.post('/auth/register', async (req, res) => {
+  const { email, password, name } = req.body || {};
+  const trimmedEmail = typeof email === 'string' ? email.trim().toLowerCase() : '';
+  if (!trimmedEmail || !password || password.length < 6) {
+    return res.status(400).json({ error: 'E-Mail und Passwort (min. 6 Zeichen) sind erforderlich.' });
+  }
+  if (!sql) {
+    return res.status(503).json({ error: 'Registrierung derzeit nicht verfügbar (Datenbank nicht verbunden).' });
+  }
+  try {
+    const passwordHash = hashPassword(password);
+    await sql`
+      INSERT INTO users (email, password_hash, name)
+      VALUES (${trimmedEmail}, ${passwordHash}, ${name?.trim() || null})
+    `;
+    const [user] = await sql`SELECT id, email, name FROM users WHERE email = ${trimmedEmail}`;
+    req.session.user = { id: String(user.id), email: user.email, name: user.name || user.email };
+    req.session.save((err) => {
+      if (err) return res.status(500).json({ error: 'Session konnte nicht gespeichert werden.' });
+      res.status(201).json({ user: req.session.user });
+    });
+  } catch (e) {
+    if (e.code === '23505') {
+      return res.status(409).json({ error: 'Diese E-Mail-Adresse ist bereits registriert.' });
+    }
+    console.error('Register error:', e);
+    res.status(500).json({ error: 'Registrierung fehlgeschlagen.' });
+  }
+});
+
+app.post('/auth/login', async (req, res) => {
+  const { email, password } = req.body || {};
+  const trimmedEmail = typeof email === 'string' ? email.trim().toLowerCase() : '';
+  if (!trimmedEmail || !password) {
+    return res.status(400).json({ error: 'E-Mail und Passwort sind erforderlich.' });
+  }
+  if (!sql) {
+    return res.status(503).json({ error: 'Anmeldung derzeit nicht verfügbar (Datenbank nicht verbunden).' });
+  }
+  try {
+    const rows = await sql`SELECT id, email, name, password_hash FROM users WHERE email = ${trimmedEmail}`;
+    if (rows.length === 0) {
+      return res.status(401).json({ error: 'E-Mail oder Passwort falsch.' });
+    }
+    const user = rows[0];
+    if (!verifyPassword(password, user.password_hash)) {
+      return res.status(401).json({ error: 'E-Mail oder Passwort falsch.' });
+    }
+    req.session.user = { id: String(user.id), email: user.email, name: user.name || user.email };
+    req.session.save((err) => {
+      if (err) return res.status(500).json({ error: 'Session konnte nicht gespeichert werden.' });
+      res.json({ user: req.session.user });
+    });
+  } catch (e) {
+    console.error('Login error:', e);
+    res.status(500).json({ error: 'Anmeldung fehlgeschlagen.' });
+  }
+});
+
+app.get('/auth/me', (req, res) => {
+  if (req.session?.user) {
+    return res.json({ user: req.session.user });
+  }
+  res.status(401).json({ user: null });
+});
+
+app.post('/auth/logout', (req, res) => {
+  req.session.destroy((err) => {
+    if (err) console.error('Logout session destroy error:', err);
+    res.clearCookie('connect.sid');
+    res.status(204).end();
+  });
+});
 
 // In-memory demo data (migrate to DB later)
 const scenarios = [
@@ -1131,50 +1286,86 @@ app.get('/api/quiz/:topic', (req, res) => {
   });
 });
 
-// User Progress API
-app.get('/api/progress/:userId', async (req, res) => {
+// User Progress API – für eingeloggten User (Session)
+app.get('/api/progress/me', async (req, res) => {
   try {
-    if (!sql) {
-      console.log('No database connection, returning empty progress');
-      return res.json({ progress: [] });
+    const userId = req.session?.user?.id;
+    if (!userId) {
+      return res.status(401).json({ error: 'Nicht angemeldet' });
     }
-    
-    const userId = req.params.userId;
+    if (!sql) {
+      return res.json({ progress: [], trainingActivity: [], totalScenarios: 0 });
+    }
     const progress = await sql`
-      SELECT s.title, s.industry, up.completed, up.score, up.completed_at
+      SELECT s.id, s.title, s.industry, up.completed, up.score, up.completed_at
       FROM user_progress up
-      JOIN scenarios s ON up.scenario_id = s.id
-      WHERE up.user_id = ${userId}
+      LEFT JOIN scenarios s ON up.scenario_id = s.id
+      WHERE up.user_id = ${String(userId)}
       ORDER BY up.completed_at DESC
     `;
-    res.json({ progress });
+    const trainingActivity = await sql`
+      SELECT module_id, completed_at
+      FROM user_training_activity
+      WHERE user_id = ${String(userId)}
+      ORDER BY completed_at DESC
+    `;
+    const scenarioCount = await sql`SELECT COUNT(*)::int AS c FROM scenarios`.catch(() => [{ c: 0 }]);
+    const totalScenarios = (scenarioCount[0]?.c) ?? 0;
+    res.json({
+      progress: progress || [],
+      trainingActivity: trainingActivity || [],
+      totalScenarios,
+    });
   } catch (error) {
     console.error('Error fetching progress:', error);
     res.status(500).json({ error: 'Failed to fetch progress' });
   }
 });
 
-// Save Progress API
+// Legacy: Progress by userId (für Kompatibilität)
+app.get('/api/progress/:userId', async (req, res) => {
+  try {
+    if (!sql) return res.json({ progress: [] });
+    const userId = req.params.userId;
+    const progress = await sql`
+      SELECT s.title, s.industry, up.completed, up.score, up.completed_at
+      FROM user_progress up
+      LEFT JOIN scenarios s ON up.scenario_id = s.id
+      WHERE up.user_id = ${userId}
+      ORDER BY up.completed_at DESC
+    `;
+    res.json({ progress: progress || [] });
+  } catch (error) {
+    console.error('Error fetching progress:', error);
+    res.status(500).json({ error: 'Failed to fetch progress' });
+  }
+});
+
+// Save Progress API – verwendet Session-User
 app.post('/api/progress', async (req, res) => {
   try {
+    const userId = req.session?.user?.id;
+    if (!userId) {
+      return res.status(401).json({ error: 'Nicht angemeldet' });
+    }
     if (!sql) {
-      console.log('No database connection, progress not saved');
       return res.json({ success: true, message: 'Progress not saved (no database connection)' });
     }
-    
-    const { userId, scenarioId, completed, score } = req.body;
-    
+    const { scenarioId, completed, score } = req.body;
+    const sid = typeof scenarioId === 'number' ? scenarioId : parseInt(scenarioId, 10);
+    if (Number.isNaN(sid)) {
+      return res.status(400).json({ error: 'Ungültige scenarioId' });
+    }
     const result = await sql`
       INSERT INTO user_progress (user_id, scenario_id, completed, score, completed_at)
-      VALUES (${userId}, ${scenarioId}, ${completed}, ${score}, ${completed ? new Date() : null})
+      VALUES (${String(userId)}, ${sid}, ${!!completed}, ${score ?? 0}, ${completed ? new Date() : null})
       ON CONFLICT (user_id, scenario_id) 
       DO UPDATE SET 
-        completed = ${completed},
-        score = ${score},
+        completed = ${!!completed},
+        score = ${score ?? 0},
         completed_at = ${completed ? new Date() : null}
       RETURNING *
     `;
-    
     res.json({ success: true, data: result[0] });
   } catch (error) {
     console.error('Error saving progress:', error);
@@ -1182,27 +1373,194 @@ app.post('/api/progress', async (req, res) => {
   }
 });
 
-// Start server with port fallback
-const startServer = async () => {
-  const server = app.listen(PORT, async () => {
-    console.log(`Backend listening on http://localhost:${PORT}`);
-    
-    // Initialize database
-    await initializeDatabase();
-  });
-
-  server.on('error', (err) => {
-    if (err.code === 'EADDRINUSE') {
-      console.log(`Port ${PORT} is in use, trying ${PORT + 1}...`);
-      const newPort = PORT + 1;
-      const newServer = app.listen(newPort, async () => {
-        console.log(`Backend listening on http://localhost:${newPort}`);
-        await initializeDatabase();
-      });
-    } else {
-      console.error('Server error:', err);
+// Training-Modul abgeschlossen (Vertriebs-Training)
+app.post('/api/training-complete', async (req, res) => {
+  try {
+    const userId = req.session?.user?.id;
+    if (!userId) {
+      return res.status(401).json({ error: 'Nicht angemeldet' });
     }
-  });
+    if (!sql) {
+      return res.json({ success: true });
+    }
+    const { moduleId } = req.body || {};
+    if (!moduleId || typeof moduleId !== 'string') {
+      return res.status(400).json({ error: 'moduleId erforderlich' });
+    }
+    await sql`
+      INSERT INTO user_training_activity (user_id, module_id, completed_at)
+      VALUES (${String(userId)}, ${moduleId}, ${new Date()})
+      ON CONFLICT (user_id, module_id) DO UPDATE SET completed_at = ${new Date()}
+    `;
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error saving training:', error);
+    res.status(500).json({ error: 'Failed to save training' });
+  }
+});
+
+// Lern-Insights: einzelne Antwort speichern (richtig/falsch pro Frage)
+app.post('/api/insights/answer', async (req, res) => {
+  try {
+    const userId = req.session?.user?.id;
+    if (!userId) {
+      return res.status(401).json({ error: 'Nicht angemeldet' });
+    }
+    if (!sql) {
+      return res.json({ success: true });
+    }
+    const { moduleId, questionId, correct } = req.body || {};
+    if (!moduleId || typeof moduleId !== 'string') {
+      return res.status(400).json({ error: 'moduleId erforderlich' });
+    }
+    const isCorrect = correct === true;
+    await sql`
+      INSERT INTO user_question_stats (user_id, module_id, correct_answers, total_answers, updated_at)
+      VALUES (${String(userId)}, ${moduleId}, ${isCorrect ? 1 : 0}, 1, ${new Date()})
+      ON CONFLICT (user_id, module_id) DO UPDATE SET
+        correct_answers = user_question_stats.correct_answers + ${isCorrect ? 1 : 0},
+        total_answers = user_question_stats.total_answers + 1,
+        updated_at = ${new Date()}
+    `;
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error saving insight answer:', error);
+    res.status(500).json({ error: 'Fehler beim Speichern' });
+  }
+});
+
+// Lern-Insights: aggregierte Statistik für eingeloggten User (Bereiche mit häufigsten Fehlern)
+const MODULE_TITLES = {
+  'objection-handling': 'Einwandbehandlung',
+  'question-techniques': 'Fragetechniken',
+  'sales-psychology': 'Verkaufspsychologie',
+  'sales-language': 'Verkaufssprache',
+  'practice-quiz-einwaende': 'Adaptives Quiz (Einwände)',
+  'practice-quiz-fragen': 'Adaptives Quiz (Fragen)',
+  'practice-flashcards': 'Karteikarten',
+  'practice-rollenspiel': 'Rollenspiel',
+  'practice-micro-einwaende': 'Mikro-Learning (Einwände)',
+  'practice-micro-spin': 'Mikro-Learning (SPIN)'
+};
+
+const MODULE_RECOMMENDATIONS = {
+  'objection-handling': {
+    low: 'Wiederhole Modul „Preis-Einwände" in 2 Tagen',
+    mid: 'Fokus auf „Konkurrenz-Einwände"',
+    high: 'Weiter mit „Funnel-Fragen – Fortgeschritten"'
+  },
+  'question-techniques': {
+    low: 'Wiederhole „SPIN-Selling" und „BANT-Qualifizierung"',
+    mid: 'Fokus auf „Offene vs. geschlossene Fragen"',
+    high: 'Weiter mit „Funnel-Fragen – Fortgeschritten"'
+  },
+  'sales-psychology': {
+    low: 'Wiederhole Grundlagen „DISC" und „Reziprozität"',
+    mid: 'Fokus auf „Reziprozität in B2B"',
+    high: 'Weiter mit „Knappheit und sozialer Beweis"'
+  },
+  'sales-language': {
+    low: 'Wiederhole „Professionelle Formulierungen"',
+    mid: 'Fokus auf „Wert-Kommunikation"',
+    high: 'Weiter mit „Abschluss-Formulierungen"'
+  },
+  'practice-quiz-einwaende': {
+    low: 'Wiederhole Einwandbehandlung im Vertriebs-Training',
+    mid: 'Mehr Übung im Adaptiven Quiz „Einwände"',
+    high: 'Weiter mit Fragetechniken oder Rollenspiel'
+  },
+  'practice-quiz-fragen': {
+    low: 'Wiederhole Fragetechniken im Vertriebs-Training',
+    mid: 'Mehr Übung im Adaptiven Quiz „Fragen"',
+    high: 'Weiter mit Einwandbehandlung oder Mikro-Learning'
+  },
+  'practice-flashcards': {
+    low: 'Karteikarten häufiger durchgehen, Schwer-Karten wiederholen',
+    mid: 'Schwer bewertete Karten gezielt üben',
+    high: 'Weiter mit Quiz oder Rollenspiel'
+  },
+  'practice-rollenspiel': {
+    low: 'Rollenspiel-Szenarien mehrfach durchspielen',
+    mid: 'Fokus auf Kundentyp und Feedback im Rollenspiel',
+    high: 'Weiter mit Herausforderung oder Mikro-Learning'
+  },
+  'practice-micro-einwaende': {
+    low: 'Mikro-Learning „Einwände" wiederholen',
+    mid: 'Weitere Einheiten zu Einwandbehandlung',
+    high: 'Weiter mit SPIN oder Vertriebs-Training'
+  },
+  'practice-micro-spin': {
+    low: 'Mikro-Learning „SPIN" wiederholen',
+    mid: 'Weitere Einheiten zu Fragetechniken',
+    high: 'Weiter mit Einwände oder Vertriebs-Training'
+  }
+};
+
+function getRecommendation(moduleId, percentage) {
+  const rec = MODULE_RECOMMENDATIONS[moduleId];
+  if (!rec) return 'Weiter üben.';
+  if (percentage < 70) return rec.low;
+  if (percentage < 90) return rec.mid;
+  return rec.high;
+}
+
+app.get('/api/insights/me', async (req, res) => {
+  try {
+    const userId = req.session?.user?.id;
+    if (!userId) {
+      return res.status(401).json({ error: 'Nicht angemeldet' });
+    }
+    if (!sql) {
+      return res.json({ insights: [] });
+    }
+    const rows = await sql`
+      SELECT module_id, correct_answers, total_answers
+      FROM user_question_stats
+      WHERE user_id = ${String(userId)} AND total_answers > 0
+      ORDER BY (correct_answers::float / NULLIF(total_answers, 0)) ASC, total_answers DESC
+    `;
+    const insights = rows.map((r) => {
+      const pct = r.total_answers > 0 ? Math.round((r.correct_answers / r.total_answers) * 100) : 0;
+      return {
+        moduleId: r.module_id,
+        title: MODULE_TITLES[r.module_id] || r.module_id,
+        correctAnswers: r.correct_answers,
+        totalAnswers: r.total_answers,
+        percentageCorrect: pct,
+        recommendation: getRecommendation(r.module_id, pct)
+      };
+    });
+    res.json({ insights });
+  } catch (error) {
+    console.error('Error fetching insights:', error);
+    res.status(500).json({ error: 'Fehler beim Laden der Insights' });
+  }
+});
+
+// Start server with port fallback (probiert mehrere Ports bis einer frei ist)
+const startServer = async () => {
+  const portsToTry = [PORT, 4001, 40011, 40012, 40013, 40014, 40015, 40016, 40017, 40018];
+  let portIndex = 0;
+
+  function tryListen(port) {
+    const server = app.listen(port, async () => {
+      console.log(`Backend listening on http://localhost:${server.address().port}`);
+      await initializeDatabase();
+    });
+    server.on('error', (err) => {
+      if (err.code === 'EADDRINUSE') {
+        server.close(() => {});
+        portIndex++;
+        const nextPort = portsToTry[portIndex] ?? port + 1;
+        console.log(`Port ${port} is in use, trying ${nextPort}...`);
+        tryListen(nextPort);
+      } else {
+        console.error('Server error:', err);
+      }
+    });
+  }
+
+  tryListen(portsToTry[0]);
 };
 
 startServer();

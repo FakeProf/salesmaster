@@ -8,14 +8,14 @@
     "backend"
   ],
   "scripts": {
-    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
-    "dev:frontend": "npm --workspace frontend run dev",
-    "dev:backend": "npm --workspace backend run dev",
+    "dev": "run-p dev:backend dev:frontend",
+    "dev:frontend": "npm --prefix frontend run dev",
+    "dev:backend": "npm --prefix backend run dev",
     "build": "npm run build:frontend && npm run build:backend",
-    "build:frontend": "npm --workspace frontend run build",
-    "build:backend": "npm --workspace backend run build",
-    "start": "npm --workspace backend run start",
-    "install:all": "npm install && npm --workspace frontend install && npm --workspace backend install"
+    "build:frontend": "npm --prefix frontend run build",
+    "build:backend": "npm --prefix backend run build",
+    "start": "npm --prefix backend run start",
+    "install:all": "npm install && npm --prefix frontend install && npm --prefix backend install"
   },
   "keywords": [
     "sales",
@@ -27,6 +27,7 @@
   "author": "SalesMaster",
   "license": "MIT",
   "devDependencies": {
-    "concurrently": "^9.2.1"
+    "baseline-browser-mapping": "^2.9.19",
+    "npm-run-all": "^4.1.5"
   }
 }

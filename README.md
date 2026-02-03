@@ -127,4 +127,4 @@ npm run start            # Production Server
 
 ## 📄 Lizenz
 
-© 2025 SalesMaster. Alle Rechte vorbehalten.
+© 2026 SalesMaster. Alle Rechte vorbehalten.
