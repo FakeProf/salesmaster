@@ -6,9 +6,9 @@
 [build.environment]
   NODE_VERSION = "18.19.0"
 
-# Backend-Function: längeres Timeout für DB/API
+# Backend-Function: server.js wird von build-function.js gebündelt (CJS inkl. Backend)
 [functions]
-  node_bundler = "esbuild"
+  node_bundler = "none"
 [functions.server]
   timeout = 26
 

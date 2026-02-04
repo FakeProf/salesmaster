@@ -1,24 +1,25 @@
 /**
  * Netlify Function (CommonJS): leitet /api/* und /auth/* an das Express-Backend weiter.
- * CommonJS-Einstieg, damit die Runtime require() nutzen kann; ESM-Module per import().
+ * Backend wird als ESM (backend.bundle.mjs) gebaut und per import() geladen (Top-Level-Await).
  */
 process.env.NETLIFY = 'true';
 
-let handlerPromise = null;
+const serverlessHttp = require('serverless-http');
 
-async function getHandler() {
-  if (handlerPromise) return handlerPromise;
-  handlerPromise = (async () => {
-    const serverlessHttp = (await import('serverless-http')).default;
-    const { app } = await import('../../backend/index.js');
-    return serverlessHttp(app);
-  })();
-  return handlerPromise;
+let serverlessPromise = null;
+function getServerless() {
+  if (!serverlessPromise) {
+    serverlessPromise = import('./backend.bundle.mjs').then(function (mod) {
+      const app = mod && mod.app;
+      return app ? serverlessHttp(app) : serverlessHttp(mod);
+    });
+  }
+  return serverlessPromise;
 }
 
 async function handler(event, context) {
   try {
-    const serverless = await getHandler();
+    const serverless = await getServerless();
     let path = event.path || event.rawPath || '';
     const originalPath = path;
     if (path.startsWith('/.netlify/functions/server')) {
