@@ -48,6 +48,9 @@ export function AuthProvider({ children }) {
         data = await res.json();
       } catch (_) {
         const text = await res.text().catch(() => '');
+        if (res.status === 502) {
+          return { ok: false, error: 'Anmeldung fehlgeschlagen. (HTTP 502 – Backend-Funktion antwortet nicht. Bitte kurz warten und erneut versuchen; bei Wiederholung Netlify-Logs prüfen.)' };
+        }
         const preview = text ? ` – Antwort: ${text.trim().slice(0, 80)}${text.length > 80 ? '…' : ''}` : '';
         console.error('Login response not JSON:', res.status, text.slice(0, 300));
         return { ok: false, error: `Anmeldung fehlgeschlagen. (HTTP ${res.status}${preview})` };
@@ -55,6 +58,9 @@ export function AuthProvider({ children }) {
       if (res.ok && data.user) {
         setUser(data.user);
         return { ok: true };
+      }
+      if (res.status === 502) {
+        return { ok: false, error: 'Anmeldung fehlgeschlagen. (HTTP 502 – Backend-Funktion antwortet nicht. Bitte kurz warten und erneut versuchen; bei Wiederholung Netlify-Logs prüfen.)' };
       }
       const msg = data.error || 'Anmeldung fehlgeschlagen.';
       const detail = data.detail ? ` – ${data.detail}` : '';
@@ -81,12 +87,19 @@ export function AuthProvider({ children }) {
         data = await res.json();
       } catch (_) {
         const text = await res.text().catch(() => '');
+        if (res.status === 502) {
+          return { ok: false, error: 'Registrierung fehlgeschlagen. (HTTP 502 – Backend-Funktion antwortet nicht. Bitte kurz warten und erneut versuchen; bei Wiederholung Netlify-Logs prüfen.)' };
+        }
+        const preview = text ? ` – Antwort: ${text.trim().slice(0, 80)}${text.length > 80 ? '…' : ''}` : '';
         console.error('Register response not JSON:', res.status, text.slice(0, 300));
-        return { ok: false, error: `Registrierung fehlgeschlagen. (HTTP ${res.status}${text ? ' – Antwort ist kein JSON)' : ')'}` };
+        return { ok: false, error: `Registrierung fehlgeschlagen. (HTTP ${res.status}${preview})` };
       }
       if (res.ok && data.user) {
         setUser(data.user);
         return { ok: true };
+      }
+      if (res.status === 502) {
+        return { ok: false, error: 'Registrierung fehlgeschlagen. (HTTP 502 – Backend-Funktion antwortet nicht. Bitte kurz warten und erneut versuchen; bei Wiederholung Netlify-Logs prüfen.)' };
       }
       const msg = data.error || 'Registrierung fehlgeschlagen.';
       const detail = data.detail ? ` – ${data.detail}` : '';

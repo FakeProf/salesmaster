@@ -1581,7 +1581,12 @@ app.get('/api/insights/me', async (req, res) => {
 });
 
 if (isNetlify) {
-  await initializeDatabase();
+  try {
+    await initializeDatabase();
+  } catch (e) {
+    console.error('Netlify DB init error:', e?.message || e);
+    // App trotzdem exportieren, Register/Login antworten dann mit 503
+  }
 }
 
 export { app };
