@@ -1,6 +1,7 @@
 /**
  * Netlify Function (CommonJS): leitet /api/* und /auth/* an das Express-Backend weiter.
- * Backend wird als ESM (backend.bundle.mjs) gebaut und per import() geladen (Top-Level-Await).
+ * Backend wird als ESM (backend-bundle.mjs) gebaut und per import() geladen (Top-Level-Await).
+ * Liegt ausserhalb netlify/functions/, damit nur server.js als Function deployed wird.
  */
 process.env.NETLIFY = 'true';
 
@@ -9,7 +10,7 @@ const serverlessHttp = require('serverless-http');
 let serverlessPromise = null;
 function getServerless() {
   if (!serverlessPromise) {
-    serverlessPromise = import('./backend.bundle.mjs').then(function (mod) {
+    serverlessPromise = import('./backend-bundle.mjs').then(function (mod) {
       const app = mod && mod.app;
       return app ? serverlessHttp(app) : serverlessHttp(mod);
     });
