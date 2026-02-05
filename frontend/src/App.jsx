@@ -46,7 +46,9 @@ function Layout({ children }) {
   const { user, loading, logout, refreshUser, showAuthModal, setShowAuthModal } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
   const [userMenuOpen, setUserMenuOpen] = React.useState(false)
+  const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false)
   const userMenuRef = React.useRef(null)
+  const mobileMenuRef = React.useRef(null)
 
   useEffect(() => {
     if (searchParams.get('logged_in') === '1') {
@@ -68,6 +70,15 @@ function Layout({ children }) {
     return () => document.removeEventListener('click', close)
   }, [userMenuOpen])
 
+  React.useEffect(() => {
+    if (!mobileMenuOpen) return
+    const close = (e) => {
+      if (mobileMenuRef.current && !mobileMenuRef.current.contains(e.target)) setMobileMenuOpen(false)
+    }
+    document.addEventListener('click', close)
+    return () => document.removeEventListener('click', close)
+  }, [mobileMenuOpen])
+
   return (
     <div className="app-container">
       <header className="app-header">
@@ -75,12 +86,25 @@ function Layout({ children }) {
           <NavLink to="/" className="logo-link">
             <h1>SalesMaster</h1>
           </NavLink>
-          <nav className="nav-tabs">
-            <NavLink to="/training" className="nav-tab">Vertriebs-Training</NavLink>
-            <NavLink to="/practice" className="nav-tab">Übungsmodus</NavLink>
-            <NavLink to="/scenarios" className="nav-tab">Szenarien</NavLink>
-            <NavLink to="/leitfaden" className="nav-tab">Leitfaden</NavLink>
-            <NavLink to="/email-check" className="nav-tab">E-Mail-Prüfung</NavLink>
+          <button 
+            type="button" 
+            className="mobile-menu-toggle"
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            aria-label="Menü öffnen"
+            aria-expanded={mobileMenuOpen}
+          >
+            <span className="hamburger-icon">
+              <span></span>
+              <span></span>
+              <span></span>
+            </span>
+          </button>
+          <nav className={`nav-tabs ${mobileMenuOpen ? 'mobile-menu-open' : ''}`} ref={mobileMenuRef}>
+            <NavLink to="/training" className="nav-tab" onClick={() => setMobileMenuOpen(false)}>Vertriebs-Training</NavLink>
+            <NavLink to="/practice" className="nav-tab" onClick={() => setMobileMenuOpen(false)}>Übungsmodus</NavLink>
+            <NavLink to="/scenarios" className="nav-tab" onClick={() => setMobileMenuOpen(false)}>Szenarien</NavLink>
+            <NavLink to="/leitfaden" className="nav-tab" onClick={() => setMobileMenuOpen(false)}>Leitfaden</NavLink>
+            <NavLink to="/email-check" className="nav-tab" onClick={() => setMobileMenuOpen(false)}>E-Mail-Prüfung</NavLink>
           </nav>
           <div className="header-auth">
             {!loading && (
