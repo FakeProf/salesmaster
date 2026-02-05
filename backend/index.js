@@ -10,6 +10,12 @@ try {
   __dirname = process.cwd(); // Fallback für CJS-Bundle
 }
 dotenv.config({ path: path.join(__dirname, '.env') });
+// Debug: Prüfe ob GROQ_API_KEY geladen wurde
+console.log('Environment check:', {
+  envFile: path.join(__dirname, '.env'),
+  groqKeyExists: !!process.env.GROQ_API_KEY,
+  groqKeyLength: process.env.GROQ_API_KEY ? process.env.GROQ_API_KEY.length : 0
+});
 
 import crypto from 'crypto';
  import express from 'express';
