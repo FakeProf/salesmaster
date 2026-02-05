@@ -7,11 +7,11 @@ const esbuild = require('esbuild');
 const path = require('path');
 const fs = require('fs');
 
-const serverDir = path.join(__dirname, 'netlify', 'functions', 'server');
-fs.mkdirSync(serverDir, { recursive: true });
-const backendBundle = path.join(serverDir, 'backend-bundle.mjs');
+const functionsDir = path.join(__dirname, 'netlify', 'functions');
+fs.mkdirSync(functionsDir, { recursive: true });
+const backendBundle = path.join(functionsDir, 'backend-bundle.mjs');
 const serverEntry = path.join(__dirname, 'netlify', 'server-source.js');
-const serverOut = path.join(serverDir, 'index.js');
+const serverOut = path.join(functionsDir, 'server.js');
 
 async function build() {
   await esbuild.build({
