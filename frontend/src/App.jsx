@@ -1,10 +1,46 @@
 import React, { useEffect, useState } from 'react'
-import { Routes, Route, NavLink, useSearchParams } from 'react-router-dom'
+import { Routes, Route, NavLink, useSearchParams, useNavigate } from 'react-router-dom'
 import { useAuth } from './AuthContext'
 import { apiFetch } from './api'
 import AuthModal from './AuthModal'
 import EmailChecker from './EmailChecker'
 import './App.css'
+
+// Toast Notification Context
+const ToastContext = React.createContext(null)
+
+function ToastProvider({ children }) {
+  const [toasts, setToasts] = React.useState([])
+
+  const showToast = (message, type = 'info') => {
+    const id = Date.now()
+    setToasts(prev => [...prev, { id, message, type }])
+    setTimeout(() => {
+      setToasts(prev => prev.filter(t => t.id !== id))
+    }, 3000)
+  }
+
+  return (
+    <ToastContext.Provider value={showToast}>
+      {children}
+      <div className="toast-container">
+        {toasts.map(toast => (
+          <div key={toast.id} className={`toast toast-${toast.type}`}>
+            {toast.message}
+          </div>
+        ))}
+      </div>
+    </ToastContext.Provider>
+  )
+}
+
+function useToast() {
+  const context = React.useContext(ToastContext)
+  if (!context) {
+    return () => {} // Fallback: keine Aktion
+  }
+  return context
+}
 
 function Layout({ children }) {
   const { user, loading, logout, refreshUser, showAuthModal, setShowAuthModal } = useAuth()
@@ -916,6 +952,9 @@ function Practice() {
   const [challengeTime, setChallengeTime] = React.useState(300) // 5 Minuten
   const [challengeAnswer, setChallengeAnswer] = React.useState('')
   const [challengeTimer, setChallengeTimer] = React.useState(null)
+  const [challengeEvaluation, setChallengeEvaluation] = React.useState(null)
+  const [evaluatingChallenge, setEvaluatingChallenge] = React.useState(false)
+  const showToast = useToast()
   
   // Mikro-Learning State
   const [microStoryIndex, setMicroStoryIndex] = React.useState(0)
@@ -2783,14 +2822,19 @@ function Practice() {
       criteria: ['Klarheit', 'Nutzenargumentation', 'Empathie & Sicherheit']
     },
     {
+      title: 'Preis-Einwand',
+      situation: 'Kunde: "Das ist zu teuer. Ich kann das woanders günstiger bekommen."',
+      criteria: ['Wert-Kommunikation', 'ROI-Argumentation', 'Unterschiede klar machen']
+    },
+    {
+      title: 'Vertrauens-Einwand',
+      situation: 'Kunde: "Ich kenne Ihre Firma nicht. Warum sollte ich Ihnen vertrauen?"',
+      criteria: ['Vertrauensaufbau', 'Referenzen & Nachweise', 'Transparenz']
+    },
+    {
       title: 'Komplexer Einwand-Mix',
       situation: 'Kunde: "Das ist zu teuer, ich kenne Ihre Firma nicht, und außerdem muss ich erst noch mit meinem Team sprechen."',
       criteria: ['Priorisierung', 'Systematische Einwandbehandlung', 'Vertrauensaufbau']
-    },
-    {
-      title: 'Emotionaler Kunde',
-      situation: 'Kunde ist frustriert von vorherigen Anbietern: "Ich habe schon so viele schlechte Erfahrungen gemacht. Warum sollte ich Ihnen vertrauen?"',
-      criteria: ['Empathie', 'Aktives Zuhören', 'Konkrete Lösungen']
     },
     {
       title: 'BANT-Qualifizierung in 3 Minuten',
@@ -3146,12 +3190,13 @@ function Practice() {
     }
   }
 
-  const startChallenge = () => {
+  const startChallenge = (index = 0) => {
     setActiveMode('challenge')
     setChallengeActive(true)
-    setChallengeIndex(0)
+    setChallengeIndex(index)
     setChallengeTime(300)
     setChallengeAnswer('')
+    setChallengeEvaluation(null)
     // Timer starten
     const timer = setInterval(() => {
       setChallengeTime(prev => {
@@ -3164,6 +3209,75 @@ function Practice() {
     }, 1000)
     setChallengeTimer(timer)
   }
+  
+  const startChallengeSelection = () => {
+    setActiveMode('challenge-selection')
+  }
+  
+  const handleSubmitChallengeAnswer = async () => {
+    if (!challengeAnswer.trim()) {
+      showToast('Bitte gib eine Antwort ein', 'error')
+      return
+    }
+    
+    if (!user) {
+      setShowAuthModal(true)
+      return
+    }
+    
+    const currentChallenge = challenges[challengeIndex] || challenges[0]
+    if (!currentChallenge) {
+      showToast('Fehler: Herausforderung nicht gefunden', 'error')
+      return
+    }
+    
+    console.log('Submitting challenge answer:', {
+      challengeIndex,
+      challengeTitle: currentChallenge.title,
+      situation: currentChallenge.situation,
+      criteria: currentChallenge.criteria
+    })
+    
+    setEvaluatingChallenge(true)
+    try {
+      const res = await apiFetch('/api/practice/evaluate-challenge', {
+        method: 'POST',
+        body: JSON.stringify({
+          challengeTitle: currentChallenge.title,
+          situation: currentChallenge.situation,
+          answer: challengeAnswer.trim(),
+          criteria: currentChallenge.criteria
+        })
+      })
+      
+      if (res.ok) {
+        const data = await res.json()
+        console.log('Evaluation received:', data)
+        if (data.evaluation) {
+          setChallengeEvaluation(data.evaluation)
+          showToast('Antwort erfolgreich analysiert', 'success')
+        } else {
+          console.error('No evaluation in response:', data)
+          showToast('Fehler: Keine Bewertung erhalten', 'error')
+        }
+      } else {
+        const error = await res.json().catch(() => ({}))
+        console.error('API error:', error)
+        showToast(`Fehler bei der Analyse: ${error.error || error.message || 'Unbekannter Fehler'}`, 'error')
+      }
+    } catch (error) {
+      console.error('Fehler bei der Challenge-Bewertung:', error)
+      console.error('Error details:', {
+        message: error.message,
+        stack: error.stack,
+        challengeIndex,
+        currentChallenge
+      })
+      showToast(`Fehler bei der Analyse: ${error.message || 'Netzwerkfehler'}`, 'error')
+    } finally {
+      setEvaluatingChallenge(false)
+    }
+  }
 
   const handleNextChallenge = () => {
     if (challengeTimer) {
@@ -3174,6 +3288,7 @@ function Practice() {
       setChallengeIndex(challengeIndex + 1)
       setChallengeTime(300)
       setChallengeAnswer('')
+      setChallengeEvaluation(null)
       // Timer neu starten
       const timer = setInterval(() => {
         setChallengeTime(prev => {
@@ -3230,8 +3345,21 @@ function Practice() {
   }
 
   const handleBack = () => {
-    setActiveMode(null)
-    setActiveTopic(null)
+    if (activeMode === 'challenge-selection') {
+      setActiveMode(null)
+    } else if (activeMode === 'challenge') {
+      setActiveMode('challenge-selection')
+      if (challengeTimer) {
+        clearInterval(challengeTimer)
+        setChallengeTimer(null)
+      }
+      setChallengeTime(300)
+      setChallengeAnswer('')
+      setChallengeEvaluation(null)
+    } else {
+      setActiveMode(null)
+      setActiveTopic(null)
+    }
   }
 
   // Render verschiedene Modi
@@ -3359,8 +3487,46 @@ function Practice() {
     )
   }
 
+  if (activeMode === 'challenge-selection') {
+    return (
+      <div className="practice-container">
+        <div className="section-header">
+          <button className="btn-back" onClick={handleBack}>← Zurück</button>
+          <h2>Herausforderung auswählen</h2>
+        </div>
+        <div className="challenge-selection-container">
+          <p className="challenge-selection-description">
+            Wähle eine Herausforderung aus, die du üben möchtest. Jede Herausforderung hat spezifische Bewertungskriterien.
+          </p>
+          <div className="challenge-selection-grid">
+            {challenges.map((challenge, idx) => (
+              <div key={idx} className="challenge-selection-card">
+                <h3>{challenge.title}</h3>
+                <p className="challenge-selection-situation">{challenge.situation}</p>
+                <div className="challenge-selection-criteria">
+                  <strong>Bewertungskriterien:</strong>
+                  <ul>
+                    {challenge.criteria.map((criterion, cIdx) => (
+                      <li key={cIdx}>{criterion}</li>
+                    ))}
+                  </ul>
+                </div>
+                <button 
+                  className="btn btn-primary" 
+                  onClick={() => startChallenge(idx)}
+                >
+                  Herausforderung starten
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   if (activeMode === 'challenge') {
-    const challenge = challenges[0]
+    const challenge = challenges[challengeIndex] || challenges[0]
     const minutes = Math.floor(challengeTime / 60)
     const seconds = challengeTime % 60
     
@@ -3370,6 +3536,7 @@ function Practice() {
           <button className="btn-back" onClick={handleBack}>← Zurück</button>
           <h2>Herausforderung: {challenge.title}</h2>
           <p className="challenge-timer">⏱️ {minutes}:{seconds.toString().padStart(2, '0')}</p>
+          <p className="challenge-progress">Herausforderung {challengeIndex + 1} von {challenges.length}</p>
         </div>
         <div className="challenge-container">
           <div className="challenge-card">
@@ -3391,7 +3558,72 @@ function Practice() {
                 ))}
               </ul>
             </div>
-            <button className="btn primary" onClick={handleBack}>Antwort einreichen</button>
+            <button 
+              className="btn primary" 
+              onClick={handleSubmitChallengeAnswer}
+              disabled={!challengeAnswer.trim() || evaluatingChallenge}
+            >
+              {evaluatingChallenge ? 'Analysiere Antwort...' : 'Antwort einreichen'}
+            </button>
+            {challengeEvaluation && (
+              <div className="challenge-evaluation">
+                <h4>Bewertung:</h4>
+                <div className="evaluation-scores">
+                  {challenge.criteria.map((criterion, idx) => {
+                    const score = challengeEvaluation.scores?.[criterion] || challengeEvaluation.scores?.[idx] || 0
+                    return (
+                      <div key={idx} className="evaluation-score-item">
+                        <span className="evaluation-criterion">{criterion}:</span>
+                        <span className="evaluation-points">{score}/5 Punkte</span>
+                        <div className="evaluation-bar">
+                          <div 
+                            className="evaluation-bar-fill" 
+                            style={{ width: `${(score / 5) * 100}%` }}
+                          />
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+                <div className="evaluation-total">
+                  <strong>Gesamt: {challengeEvaluation.totalScore || 0}/15 Punkte</strong>
+                </div>
+                {challengeEvaluation.feedback && (
+                  <div className="evaluation-feedback">
+                    <h5>Feedback:</h5>
+                    <p>{typeof challengeEvaluation.feedback === 'string' ? challengeEvaluation.feedback : JSON.stringify(challengeEvaluation.feedback)}</p>
+                  </div>
+                )}
+                {challengeEvaluation.bestAnswer && (
+                  <div className="evaluation-best-answer">
+                    <h5>Beispielantwort (15/15 Punkte):</h5>
+                    <div className="best-answer-content">
+                      <p>{typeof challengeEvaluation.bestAnswer === 'string' ? challengeEvaluation.bestAnswer : JSON.stringify(challengeEvaluation.bestAnswer)}</p>
+                    </div>
+                  </div>
+                )}
+                <div className="evaluation-actions">
+                  <button className="btn btn-outline" onClick={() => {
+                    setChallengeEvaluation(null)
+                    setChallengeAnswer('')
+                  }}>
+                    Neue Antwort versuchen
+                  </button>
+                  <button className="btn btn-outline" onClick={() => {
+                    setChallengeEvaluation(null)
+                    setChallengeAnswer('')
+                    if (challengeTimer) {
+                      clearInterval(challengeTimer)
+                      setChallengeTimer(null)
+                    }
+                    setChallengeTime(300)
+                    setActiveMode('challenge-selection')
+                  }}>
+                    Zurück zur Auswahl
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -3527,7 +3759,7 @@ function Practice() {
       icon: 'fas fa-trophy',
       description: 'Spezielle Übungen für Fortgeschrittene. Meistere komplexe Verkaufssituationen.',
       buttons: [
-        { label: 'Herausforderung starten', action: startChallenge }
+        { label: 'Herausforderung auswählen', action: startChallengeSelection }
       ]
     },
     {
@@ -3729,7 +3961,7 @@ function Scenarios() {
         })
       }).catch(() => {})
     }
-    alert(`Szenario abgeschlossen! Dein Score: ${finalScore} Punkte`)
+    // Szenario abgeschlossen - Score wird im UI angezeigt
     setActiveScenario(null)
     setCurrentPhaseIndex(0)
     setCurrentTaskIndex(0)
@@ -3984,35 +4216,37 @@ const TRAINING_MODULE_NAMES = {
 const TOTAL_TRAINING_MODULES = 4
 
 // Leitfaden-Generator: Kapitel mit je mehreren Formulierungs-Varianten
+// Angepasst für Kaltakquise im Callcenter (telefonisch, ohne persönliche Präsenz)
 const LEITFADEN_KAPITEL = [
   {
     id: 'begruessung',
     title: 'Begrüßung',
     options: [
-      'Guten Tag.',
-      'Einen schönen guten Tag.',
-      'Guten Tag, vielen Dank für Ihre Zeit heute.',
-      'Hallo und herzlich willkommen.',
-      'Schön, dass Sie da sind.',
-      'Guten Tag, freut mich, Sie kennenzulernen.'
+      'Guten Tag, mein Name ist [Ihr Name] von [Firma].',
+      'Guten Tag, [Name des Gesprächspartners], hier ist [Ihr Name] von [Firma].',
+      'Guten Tag, vielen Dank, dass Sie sich Zeit nehmen.',
+      'Hallo, mein Name ist [Ihr Name]. Ich rufe im Auftrag von [Auftraggeber] an.',
+      'Guten Tag, ich melde mich von [Firma] wegen [Thema].',
+      'Guten Tag, [Name], ich rufe Sie kurz an, weil …'
     ]
   },
   {
     id: 'einstieg',
-    title: 'Einstieg / Small Talk',
+    title: 'Einstieg / Gesprächseröffnung',
     options: [
-      'Wie geht es Ihnen heute?',
-      'Wie war Ihre Anreise?',
-      'Sind Sie gut zu uns gefunden?',
-      'Darf ich Ihnen etwas zu trinken anbieten?',
-      'Bevor wir starten: Gibt es etwas, das Sie heute besonders beschäftigt?'
+      'Haben Sie kurz Zeit für ein Gespräch?',
+      'Ich rufe Sie an, weil ich Ihnen eine interessante Möglichkeit vorstellen möchte.',
+      'Ich möchte Ihnen kurz erklären, warum ich anrufe.',
+      'Sind Sie der richtige Ansprechpartner für [Thema]?',
+      'Bevor ich Ihnen mehr erzähle: Haben Sie gerade 2-3 Minuten Zeit?',
+      'Ich rufe an, um Ihnen zu zeigen, wie andere Unternehmen [Nutzen] erreichen.'
     ]
   },
   {
     id: 'fragen',
     title: 'Fragen & Bedarf',
     options: [
-      'Wie läuft bei Ihnen aktuell …?',
+      'Wie handhaben Sie aktuell [Thema]?',
       'Was ist Ihnen dabei am wichtigsten?',
       'Welche Herausforderungen haben Sie in diesem Bereich?',
       'Was würde passieren, wenn Sie das Problem nicht lösen?',
@@ -4020,19 +4254,23 @@ const LEITFADEN_KAPITEL = [
       'Was wäre für Sie ein Erfolg in den nächsten 6 Monaten?',
       'Wer ist neben Ihnen noch in die Entscheidung eingebunden?',
       'Was sollte ich unbedingt noch wissen?',
-      'Welche Fragen habe ich Ihnen noch nicht gestellt?'
+      'Welche Fragen habe ich Ihnen noch nicht gestellt?',
+      'Wie viele Mitarbeiter sind davon betroffen?',
+      'Was kostet Sie die aktuelle Situation an Zeit oder Geld?'
     ]
   },
   {
     id: 'pitch',
     title: 'Lösung vorstellen (Pitch)',
     options: [
-      'Darf ich Ihnen unsere Lösung kurz vorstellen?',
-      'Lassen Sie mich zeigen, wie wir Sie unterstützen können.',
-      'Unsere Lösung hilft Ihnen dabei, …',
+      'Darf ich Ihnen unsere Lösung kurz am Telefon erklären?',
+      'Lassen Sie mich Ihnen zeigen, wie wir Sie unterstützen können.',
+      'Unsere Lösung hilft Unternehmen dabei, [konkreter Nutzen].',
       'Wo sehen Sie den größten Nutzen für sich?',
-      'Andere Kunden sagen uns, dass …',
-      'Der entscheidende Vorteil für Sie wäre …'
+      'Andere Kunden sagen uns, dass sie [konkreter Vorteil] erreichen.',
+      'Der entscheidende Vorteil für Sie wäre [konkreter Mehrwert].',
+      'Viele Unternehmen nutzen unsere Lösung, um [Problem] zu lösen.',
+      'Stellen Sie sich vor, Sie könnten [konkreter Nutzen] – wie würde das für Sie aussehen?'
     ]
   },
   {
@@ -4042,9 +4280,11 @@ const LEITFADEN_KAPITEL = [
       'Teuer im Vergleich zu was genau?',
       'Was müsste passieren, damit es sich für Sie lohnt?',
       'Das verstehe ich. Was genau möchten Sie noch bedenken?',
-      'Verstehe. Darf ich Ihnen zeigen, wie andere das gelöst haben?',
+      'Verstehe. Darf ich Ihnen erklären, wie andere das gelöst haben?',
       'Das ist eine wichtige Frage. Lassen Sie mich das kurz einordnen.',
-      'Was bräuchten Sie, um den nächsten Schritt zu gehen?'
+      'Was bräuchten Sie, um den nächsten Schritt zu gehen?',
+      'Ich verstehe Ihre Bedenken. Was genau macht Sie unsicher?',
+      'Das höre ich öfter. Lassen Sie mich Ihnen zeigen, warum es trotzdem passt.'
     ]
   },
   {
@@ -4052,36 +4292,131 @@ const LEITFADEN_KAPITEL = [
     title: 'Abschluss & nächste Schritte',
     options: [
       'Was wäre der nächste sinnvolle Schritt für Sie?',
-      'Wie klingt das für Sie – sollen wir mit … starten?',
+      'Wie klingt das für Sie – sollen wir mit [konkreter Schritt] starten?',
       'Wann möchten Sie starten – eher diese oder nächste Woche?',
       'Soll ich Ihnen die nächsten Schritte kurz zusammenfassen?',
       'Womit möchten Sie anfangen?',
-      'Passt das so für Sie?'
+      'Passt das so für Sie?',
+      'Soll ich Ihnen eine E-Mail mit den Details schicken?',
+      'Können wir einen kurzen Termin für nächste Woche vereinbaren?',
+      'Wie wäre es mit einem 15-Minuten-Gespräch nächste Woche?'
     ]
   },
   {
     id: 'verabschiedung',
     title: 'Verabschiedung',
     options: [
-      'Vielen Dank für das Gespräch.',
+      'Vielen Dank für Ihre Zeit und das Gespräch.',
       'Ich freue mich auf die weitere Zusammenarbeit.',
-      'Kann ich Ihnen noch etwas mitgeben?',
-      'Bei Fragen melden Sie sich gern.',
+      'Kann ich Ihnen noch etwas am Telefon erklären?',
+      'Bei Fragen können Sie mich jederzeit anrufen.',
       'Einen schönen Tag noch.',
-      'Bis bald und alles Gute.'
+      'Vielen Dank und auf Wiederhören.',
+      'Ich sende Ihnen gerne die Informationen per E-Mail zu.'
     ]
   }
 ]
 
 const LEITFADEN_CHAPTER_TITLES = Object.fromEntries(LEITFADEN_KAPITEL.map(k => [k.id, k.title]))
 
+function LeitfadenOverview() {
+  return (
+    <div className="leitfaden-overview-container">
+      <div className="section-header">
+        <h2>Leitfaden</h2>
+        <p>Erstelle und verwalte deine Verkaufsleitfäden für Kaltakquise im Callcenter.</p>
+      </div>
+      <div className="leitfaden-overview-cards">
+        <NavLink to="/leitfaden/generator" className="leitfaden-overview-card">
+          <div className="leitfaden-card-icon">📝</div>
+          <h3>Leitfaden Generator</h3>
+          <p>Erstelle einen neuen Gesprächsleitfaden mit vorgefertigten Sätzen und eigenen Formulierungen.</p>
+          <div className="leitfaden-card-arrow">→</div>
+        </NavLink>
+        <NavLink to="/leitfaden/meine" className="leitfaden-overview-card">
+          <div className="leitfaden-card-icon">📚</div>
+          <h3>Meine Leitfäden</h3>
+          <p>Verwalte deine gespeicherten Leitfäden, bearbeite sie oder nutze sie für deine Gespräche.</p>
+          <div className="leitfaden-card-arrow">→</div>
+        </NavLink>
+      </div>
+    </div>
+  )
+}
+
 function LeitfadenGenerator() {
+  const { user, setShowAuthModal } = useAuth()
+  const [searchParams] = useSearchParams()
+  const navigate = useNavigate()
+  const showToast = useToast()
+  
   const [guideItems, setGuideItems] = React.useState([])
   const [customInput, setCustomInput] = React.useState('')
   const [dragSource, setDragSource] = React.useState(null) // 'suggest' | 'guide'
   const [dragIndex, setDragIndex] = React.useState(null)
   const [dropIndex, setDropIndex] = React.useState(null)
+  const [editingId, setEditingId] = React.useState(null)
+  const [editingText, setEditingText] = React.useState('')
+  const [showSaveModal, setShowSaveModal] = React.useState(false)
+  const [saveTitle, setSaveTitle] = React.useState('')
+  const [saving, setSaving] = React.useState(false)
+  const [showUSPExtractor, setShowUSPExtractor] = React.useState(false)
+  const [uspWebsiteUrl, setUspWebsiteUrl] = React.useState('')
+  const [uspInstructions, setUspInstructions] = React.useState('')
+  const [extractingUSPs, setExtractingUSPs] = React.useState(false)
+  const [extractedUSPs, setExtractedUSPs] = React.useState({
+    grundsaetzlich: [],
+    gegenueberKonkurrenten: [],
+    gegenueberAlterenMethoden: []
+  })
+  const [currentGuideId, setCurrentGuideId] = React.useState(null)
   const nextId = React.useRef(1)
+
+  // Laden eines Leitfadens zum Bearbeiten
+  React.useEffect(() => {
+    const editId = searchParams.get('edit')
+    if (editId && user) {
+      loadGuideForEdit(parseInt(editId, 10))
+    }
+  }, [searchParams, user])
+
+  const loadGuideForEdit = async (guideId) => {
+    try {
+      const res = await apiFetch('/api/guides/me')
+      if (res.ok) {
+        const data = await res.json()
+        const guide = data.guides?.find(g => g.id === guideId)
+        if (guide) {
+          const items = guide.items || []
+          setGuideItems(items)
+          // Setze nextId höher als die maximale ID in den Items
+          const maxId = items.reduce((max, item) => Math.max(max, item.id || 0), 0)
+          nextId.current = maxId + 1
+          setCurrentGuideId(guideId)
+          setSaveTitle(guide.title)
+          if (guide.usps) {
+            // Normalisiere USPs falls sie im alten Format sind
+            const usps = guide.usps
+            if (Array.isArray(usps)) {
+              setExtractedUSPs({
+                grundsaetzlich: usps,
+                gegenueberKonkurrenten: [],
+                gegenueberAlterenMethoden: []
+              })
+            } else {
+              setExtractedUSPs({
+                grundsaetzlich: usps.grundsaetzlich || [],
+                gegenueberKonkurrenten: usps.gegenueberKonkurrenten || [],
+                gegenueberAlterenMethoden: usps.gegenueberAlterenMethoden || []
+              })
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Fehler beim Laden des Leitfadens:', error)
+    }
+  }
 
   const addToGuide = (text, custom = false, chapterId = null) => {
     if (!text.trim()) return
@@ -4091,6 +4426,29 @@ function LeitfadenGenerator() {
 
   const removeFromGuide = (index) => {
     setGuideItems(prev => prev.filter((_, i) => i !== index))
+  }
+
+  const startEditing = (item) => {
+    setEditingId(item.id)
+    setEditingText(item.text)
+  }
+
+  const saveEditing = (itemId) => {
+    if (!editingText.trim()) {
+      setEditingId(null)
+      setEditingText('')
+      return
+    }
+    setGuideItems(prev => prev.map(item => 
+      item.id === itemId ? { ...item, text: editingText.trim(), custom: true } : item
+    ))
+    setEditingId(null)
+    setEditingText('')
+  }
+
+  const cancelEditing = () => {
+    setEditingId(null)
+    setEditingText('')
   }
 
   const moveInGuide = (fromIndex, toIndex) => {
@@ -4152,15 +4510,168 @@ function LeitfadenGenerator() {
   const handleCopy = () => {
     const text = guideItems.map(i => i.text).join('\n')
     if (text) {
-      navigator.clipboard.writeText(text).then(() => alert('Leitfaden in die Zwischenablage kopiert.'))
+      navigator.clipboard.writeText(text).then(() => showToast('Leitfaden in die Zwischenablage kopiert.', 'success'))
     }
+  }
+
+  const handleSave = async () => {
+    if (!saveTitle.trim()) {
+      alert('Bitte gib einen Titel ein')
+      return
+    }
+    if (guideItems.length === 0) {
+      alert('Der Leitfaden ist leer')
+      return
+    }
+    if (!user) {
+      setShowAuthModal(true)
+      return
+    }
+
+    setSaving(true)
+    try {
+      const payload = {
+        title: saveTitle.trim(),
+        items: guideItems,
+        usps: getTotalUSPCount() > 0 ? extractedUSPs : null
+      }
+
+      let res
+      if (currentGuideId) {
+        res = await apiFetch(`/api/guides/${currentGuideId}`, {
+          method: 'PUT',
+          body: JSON.stringify(payload)
+        })
+      } else {
+        res = await apiFetch('/api/guides', {
+          method: 'POST',
+          body: JSON.stringify(payload)
+        })
+      }
+
+      if (res.ok) {
+        alert('Leitfaden gespeichert!')
+        setShowSaveModal(false)
+        setSaveTitle('')
+        if (navigate) {
+          navigate('/leitfaden/meine')
+        }
+      } else {
+        const error = await res.json().catch(() => ({}))
+        alert(`Fehler beim Speichern: ${error.error || 'Unbekannter Fehler'}`)
+      }
+    } catch (error) {
+      console.error('Fehler beim Speichern:', error)
+      alert('Fehler beim Speichern')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleExtractUSPs = async (e) => {
+    if (e && e.preventDefault) {
+      e.preventDefault()
+      e.stopPropagation()
+    }
+    console.log('handleExtractUSPs called', e)
+    console.log('uspWebsiteUrl:', uspWebsiteUrl)
+    console.log('user:', user)
+    
+    if (!uspWebsiteUrl || !uspWebsiteUrl.trim()) {
+      console.log('No URL provided')
+      showToast('Bitte gib eine Website-URL ein', 'error')
+      return
+    }
+    if (!user) {
+      console.log('No user, showing auth modal')
+      setShowAuthModal(true)
+      return
+    }
+
+    console.log('Starting extraction...')
+    setExtractingUSPs(true)
+    try {
+      console.log('Calling API for:', uspWebsiteUrl.trim())
+      console.log('With instructions:', uspInstructions.trim() || '(none)')
+      const res = await apiFetch('/api/guides/extract-usps', {
+        method: 'POST',
+        body: JSON.stringify({ 
+          websiteUrl: uspWebsiteUrl.trim(),
+          instructions: uspInstructions && uspInstructions.trim() ? uspInstructions.trim() : undefined
+        })
+      })
+
+      console.log('API response status:', res.status, res.ok)
+
+      if (res.ok) {
+        const data = await res.json()
+        console.log('API response data:', data)
+        
+        // Normalisiere die USPs (kann Array oder Objekt sein)
+        const usps = data.usps || {}
+        console.log('Raw USPs:', usps, 'Type:', Array.isArray(usps) ? 'Array' : 'Object')
+        
+        const normalizedUSPs = Array.isArray(usps) 
+          ? { grundsaetzlich: usps, gegenueberKonkurrenten: [], gegenueberAlterenMethoden: [] }
+          : {
+              grundsaetzlich: usps.grundsaetzlich || [],
+              gegenueberKonkurrenten: usps.gegenueberKonkurrenten || [],
+              gegenueberAlterenMethoden: usps.gegenueberAlterenMethoden || []
+            }
+        
+        console.log('Normalized USPs:', normalizedUSPs)
+        setExtractedUSPs(normalizedUSPs)
+        
+        const totalCount = (normalizedUSPs.grundsaetzlich?.length || 0) + 
+                          (normalizedUSPs.gegenueberKonkurrenten?.length || 0) + 
+                          (normalizedUSPs.gegenueberAlterenMethoden?.length || 0)
+        console.log('Total USP count:', totalCount)
+        
+        showToast(`USPs erfolgreich extrahiert: ${totalCount} gefunden`, 'success')
+      } else {
+        const error = await res.json().catch(() => ({}))
+        const errorMessage = error.error || error.message || `HTTP ${res.status}: ${res.statusText}`
+        console.error('Backend error:', error)
+        showToast(`Fehler bei der Extraktion: ${errorMessage}`, 'error')
+      }
+    } catch (error) {
+      console.error('Fehler bei der USP-Extraktion:', error)
+      console.error('Error stack:', error.stack)
+      showToast(`Fehler bei der USP-Extraktion: ${error.message || 'Netzwerkfehler'}`, 'error')
+    } finally {
+      setExtractingUSPs(false)
+    }
+  }
+
+  const getTotalUSPCount = () => {
+    if (!extractedUSPs || typeof extractedUSPs !== 'object') return 0
+    return (extractedUSPs.grundsaetzlich?.length || 0) + 
+           (extractedUSPs.gegenueberKonkurrenten?.length || 0) + 
+           (extractedUSPs.gegenueberAlterenMethoden?.length || 0)
+  }
+  
+  const addUSPsToGuide = () => {
+    const allUSPs = [
+      ...(extractedUSPs.grundsaetzlich || []),
+      ...(extractedUSPs.gegenueberKonkurrenten || []),
+      ...(extractedUSPs.gegenueberAlterenMethoden || [])
+    ]
+    if (allUSPs.length === 0) return
+    const uspItems = allUSPs.map(usp => ({
+      id: nextId.current++,
+      text: `${usp.title}: ${usp.description}`,
+      custom: true,
+      chapterId: null
+    }))
+    setGuideItems(prev => [...prev, ...uspItems])
+    setShowUSPExtractor(false)
   }
 
   return (
     <div className="leitfaden-container">
       <div className="section-header">
         <h2>Leitfaden-Generator</h2>
-        <p>Baue deinen Gesprächsleitfaden per Drag & Drop aus vorgeschlagenen Sätzen und eigenen Formulierungen.</p>
+        <p>Baue deinen Gesprächsleitfaden für Kaltakquise im Callcenter per Drag & Drop aus vorgeschlagenen Sätzen und eigenen Formulierungen. Die Beispielsätze sind für telefonische Gespräche ohne persönliche Präsenz optimiert.</p>
       </div>
 
       <div className="leitfaden-layout">
@@ -4226,7 +4737,7 @@ function LeitfadenGenerator() {
           }}
         >
           <h3>Dein Leitfaden</h3>
-          <p className="leitfaden-hint">Reihenfolge per Drag & Drop ändern. Klicke auf ✕ zum Entfernen.</p>
+          <p className="leitfaden-hint">Reihenfolge per Drag & Drop ändern. Klicke auf einen Satz oder ✎ zum Bearbeiten. ✕ zum Entfernen.</p>
           {guideItems.length === 0 ? (
             <p className="leitfaden-placeholder">Sätze hierher ziehen oder aus den Vorschlägen hinzufügen.</p>
           ) : (
@@ -4234,12 +4745,13 @@ function LeitfadenGenerator() {
               {guideItems.map((item, idx) => (
                 <li
                   key={item.id}
-                  className={`leitfaden-list-item ${dropIndex === idx ? 'leitfaden-drop-here' : ''}`}
-                  draggable
-                  onDragStart={(e) => handleDragStart(e, 'guide', idx, item.text)}
+                  className={`leitfaden-list-item ${dropIndex === idx ? 'leitfaden-drop-here' : ''} ${editingId === item.id ? 'leitfaden-list-item-editing' : ''}`}
+                  draggable={editingId !== item.id}
+                  onDragStart={(e) => editingId !== item.id && handleDragStart(e, 'guide', idx, item.text)}
                   onDragEnd={handleDragEnd}
-                  onDragOver={(e) => handleDragOver(e, idx)}
+                  onDragOver={(e) => editingId !== item.id && handleDragOver(e, idx)}
                   onDrop={(e) => {
+                    if (editingId === item.id) return
                     e.preventDefault()
                     e.stopPropagation()
                     if (dragSource === 'guide' && typeof dragIndex === 'number') moveInGuide(dragIndex, idx)
@@ -4247,10 +4759,45 @@ function LeitfadenGenerator() {
                   }}
                 >
                   <span className="leitfaden-list-num">{idx + 1}.</span>
-                  <span className="leitfaden-list-text">{item.text}</span>
-                  {item.custom && <span className="leitfaden-list-badge leitfaden-badge-eigen">eigen</span>}
-                  {!item.custom && item.chapterId && <span className="leitfaden-list-badge">{LEITFADEN_CHAPTER_TITLES[item.chapterId] || item.chapterId}</span>}
-                  <button type="button" className="leitfaden-remove" onClick={() => removeFromGuide(idx)} aria-label="Entfernen">✕</button>
+                  {editingId === item.id ? (
+                    <div className="leitfaden-edit-container">
+                      <input
+                        type="text"
+                        className="leitfaden-edit-input"
+                        value={editingText}
+                        onChange={(e) => setEditingText(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault()
+                            saveEditing(item.id)
+                          } else if (e.key === 'Escape') {
+                            e.preventDefault()
+                            cancelEditing()
+                          }
+                        }}
+                        onBlur={() => saveEditing(item.id)}
+                        autoFocus
+                      />
+                      <div className="leitfaden-edit-actions">
+                        <button type="button" className="leitfaden-edit-save" onClick={() => saveEditing(item.id)} aria-label="Speichern">✓</button>
+                        <button type="button" className="leitfaden-edit-cancel" onClick={cancelEditing} aria-label="Abbrechen">✕</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <span 
+                        className="leitfaden-list-text" 
+                        onClick={() => startEditing(item)}
+                        title="Klicken zum Bearbeiten"
+                      >
+                        {item.text}
+                      </span>
+                      {item.custom && <span className="leitfaden-list-badge leitfaden-badge-eigen">eigen</span>}
+                      {!item.custom && item.chapterId && <span className="leitfaden-list-badge">{LEITFADEN_CHAPTER_TITLES[item.chapterId] || item.chapterId}</span>}
+                      <button type="button" className="leitfaden-edit" onClick={() => startEditing(item)} aria-label="Bearbeiten">✎</button>
+                      <button type="button" className="leitfaden-remove" onClick={() => removeFromGuide(idx)} aria-label="Entfernen">✕</button>
+                    </>
+                  )}
                 </li>
               ))}
             </ol>
@@ -4258,11 +4805,556 @@ function LeitfadenGenerator() {
           {guideItems.length > 0 && (
             <div className="leitfaden-actions">
               <button type="button" className="btn" onClick={handleCopy}>Leitfaden kopieren</button>
+              <button type="button" className="btn btn-outline" onClick={() => setShowUSPExtractor(true)}>
+                USPs extrahieren
+              </button>
+              <button type="button" className="btn btn-primary" onClick={() => setShowSaveModal(true)}>
+                Leitfaden speichern
+              </button>
               <button type="button" className="btn btn-outline" onClick={() => setGuideItems([])}>Leitfaden leeren</button>
             </div>
           )}
         </section>
       </div>
+
+      {/* Save Modal */}
+      {showSaveModal && (
+        <div className="modal-overlay" onClick={() => !saving && setShowSaveModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h3>{currentGuideId ? 'Leitfaden aktualisieren' : 'Leitfaden speichern'}</h3>
+            <div className="modal-form">
+              <label>
+                Titel:
+                <input
+                  type="text"
+                  value={saveTitle}
+                  onChange={(e) => setSaveTitle(e.target.value)}
+                  placeholder="z.B. Kaltakquise Fachinfodienste"
+                  disabled={saving}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !saving) {
+                      handleSave()
+                    }
+                  }}
+                />
+              </label>
+              {getTotalUSPCount() > 0 && (
+                <div className="modal-usps-preview">
+                  <p><strong>Extrahierte USPs:</strong> {getTotalUSPCount()}</p>
+                </div>
+              )}
+            </div>
+            <div className="modal-actions">
+              <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
+                {saving ? 'Speichere...' : (currentGuideId ? 'Aktualisieren' : 'Speichern')}
+              </button>
+              <button className="btn btn-outline" onClick={() => setShowSaveModal(false)} disabled={saving}>
+                Abbrechen
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* USP Extractor Modal */}
+      {showUSPExtractor && (
+        <div className="modal-overlay" onClick={() => !extractingUSPs && setShowUSPExtractor(false)}>
+          <div className="modal-content modal-content-large" onClick={(e) => e.stopPropagation()}>
+            <h3>USPs aus Website extrahieren</h3>
+            <div className="modal-form">
+              <label>
+                Website-URL
+                <input
+                  type="url"
+                  value={uspWebsiteUrl}
+                  onChange={(e) => setUspWebsiteUrl(e.target.value)}
+                  placeholder="https://www.beispiel.de"
+                  disabled={extractingUSPs}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !extractingUSPs && e.ctrlKey) {
+                      e.preventDefault()
+                      handleExtractUSPs(e)
+                    }
+                  }}
+                />
+              </label>
+              <label>
+                Individuelle Anweisungen (optional)
+                <textarea
+                  value={uspInstructions}
+                  onChange={(e) => setUspInstructions(e.target.value)}
+                  placeholder="z.B. Fokussiere dich nur auf das Produkt XYZ, ignoriere andere Produkte..."
+                  disabled={extractingUSPs}
+                  rows={3}
+                  style={{ 
+                    width: '100%', 
+                    padding: '0.75rem', 
+                    borderRadius: '6px', 
+                    border: '1px solid #4a5568',
+                    backgroundColor: '#2d3748',
+                    color: '#e2e8f0',
+                    fontFamily: 'inherit',
+                    fontSize: '0.9rem',
+                    resize: 'vertical'
+                  }}
+                />
+                <small style={{ color: '#a0aec0', fontSize: '0.85rem', marginTop: '0.25rem', display: 'block' }}>
+                  Gib hier spezifische Anweisungen ein, z.B. wenn die Website mehrere Produkte hat und du nur Informationen zu einem bestimmten Produkt benötigst.
+                </small>
+              </label>
+              <button 
+                type="button"
+                className="btn btn-primary" 
+                onClick={(e) => {
+                  console.log('Button clicked, uspWebsiteUrl:', uspWebsiteUrl)
+                  handleExtractUSPs(e)
+                }} 
+                disabled={extractingUSPs || !uspWebsiteUrl || !uspWebsiteUrl.trim()}
+              >
+                {extractingUSPs ? 'Extrahiere USPs...' : 'USPs extrahieren'}
+              </button>
+            </div>
+            {getTotalUSPCount() > 0 && (
+              <div className="usp-results">
+                <h4>Extrahierte USPs:</h4>
+                
+                {extractedUSPs.grundsaetzlich && extractedUSPs.grundsaetzlich.length > 0 && (
+                  <div className="usp-category">
+                    <h5 className="usp-category-title">1. Grundsätzliche USPs</h5>
+                    <div className="usp-cards-grid">
+                      {extractedUSPs.grundsaetzlich.map((usp, idx) => (
+                        <div key={`grund-${idx}`} className="usp-card">
+                          <div className="usp-card-header">
+                            <h6 className="usp-card-title">{usp.title}</h6>
+                          </div>
+                          <div className="usp-card-body">
+                            <p className="usp-card-description">{usp.description}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                
+                {extractedUSPs.gegenueberKonkurrenten && extractedUSPs.gegenueberKonkurrenten.length > 0 && (
+                  <div className="usp-category">
+                    <h5 className="usp-category-title">2. USPs gegenüber ähnlichen Konkurrenten</h5>
+                    <div className="usp-cards-grid">
+                      {extractedUSPs.gegenueberKonkurrenten.map((usp, idx) => (
+                        <div key={`konkurrent-${idx}`} className="usp-card">
+                          <div className="usp-card-header">
+                            <h6 className="usp-card-title">{usp.title}</h6>
+                          </div>
+                          <div className="usp-card-body">
+                            <p className="usp-card-description">{usp.description}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                
+                {extractedUSPs.gegenueberAlterenMethoden && extractedUSPs.gegenueberAlterenMethoden.length > 0 && (
+                  <div className="usp-category">
+                    <h5 className="usp-category-title">3. USPs gegenüber älteren Methoden</h5>
+                    <div className="usp-cards-grid">
+                      {extractedUSPs.gegenueberAlterenMethoden.map((usp, idx) => (
+                        <div key={`alt-${idx}`} className="usp-card">
+                          <div className="usp-card-header">
+                            <h6 className="usp-card-title">{usp.title}</h6>
+                          </div>
+                          <div className="usp-card-body">
+                            <p className="usp-card-description">{usp.description}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                
+                <div className="usp-results-actions">
+                  <button className="btn btn-primary" onClick={addUSPsToGuide}>
+                    Alle USPs zu Leitfaden hinzufügen
+                  </button>
+                </div>
+              </div>
+            )}
+            <div className="modal-actions">
+              <button 
+                type="button"
+                className="btn btn-outline" 
+                onClick={() => {
+                  setShowUSPExtractor(false)
+                  setUspWebsiteUrl('')
+                  setUspInstructions('')
+                }} 
+                disabled={extractingUSPs}
+              >
+                Schließen
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function MeineLeitfaeden() {
+  const { user, loading: authLoading, setShowAuthModal } = useAuth()
+  const [guides, setGuides] = React.useState([])
+  const [loading, setLoading] = React.useState(true)
+  const [selectedGuide, setSelectedGuide] = React.useState(null)
+  const [viewMode, setViewMode] = React.useState('full') // 'full' or 'bullets'
+  const [showDeleteConfirm, setShowDeleteConfirm] = React.useState(null)
+  const [convertedBullets, setConvertedBullets] = React.useState([])
+  const [convertingBullets, setConvertingBullets] = React.useState(false)
+  const showToast = useToast()
+
+  React.useEffect(() => {
+    if (!user) {
+      setGuides([])
+      setLoading(false)
+      return
+    }
+    loadGuides()
+  }, [user])
+
+  const loadGuides = async () => {
+    setLoading(true)
+    try {
+      const res = await apiFetch('/api/guides/me')
+      if (res.ok) {
+        const data = await res.json()
+        setGuides(data.guides || [])
+      } else {
+        console.error('Fehler beim Laden der Leitfäden')
+      }
+    } catch (error) {
+      console.error('Fehler beim Laden der Leitfäden:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleDelete = async (guideId) => {
+    try {
+      const res = await apiFetch(`/api/guides/${guideId}`, { method: 'DELETE' })
+      if (res.ok) {
+        setGuides(prev => prev.filter(g => g.id !== guideId))
+        if (selectedGuide?.id === guideId) {
+          setSelectedGuide(null)
+        }
+        setShowDeleteConfirm(null)
+        showToast('Leitfaden gelöscht', 'success')
+      } else {
+        showToast('Fehler beim Löschen', 'error')
+      }
+    } catch (error) {
+      console.error('Fehler beim Löschen:', error)
+      showToast('Fehler beim Löschen', 'error')
+    }
+  }
+
+  // Konvertiere automatisch wenn ViewMode auf bullets wechselt
+  React.useEffect(() => {
+    if (selectedGuide && viewMode === 'bullets' && selectedGuide.items && selectedGuide.items.length > 0) {
+      const convertToBulletPoints = async () => {
+        setConvertingBullets(true)
+        try {
+          const res = await apiFetch('/api/guides/convert-to-bullets', {
+            method: 'POST',
+            body: JSON.stringify({ items: selectedGuide.items })
+          })
+          
+          if (res.ok) {
+            const data = await res.json()
+            const bullets = data.bullets || []
+            setConvertedBullets(bullets.map(b => `• ${b}`))
+          } else {
+            // Fallback auf einfache Komprimierung
+            console.error('KI-Konvertierung fehlgeschlagen, verwende Fallback')
+            const fallback = selectedGuide.items.map(item => {
+              const text = item.text.trim()
+              const words = text.split(/\s+/).filter(w => w.length > 3).slice(0, 4)
+              return `• ${words.join(' ')}`
+            })
+            setConvertedBullets(fallback)
+          }
+        } catch (error) {
+          console.error('Fehler bei KI-Konvertierung:', error)
+          // Fallback auf einfache Komprimierung
+          const fallback = selectedGuide.items.map(item => {
+            const text = item.text.trim()
+            const words = text.split(/\s+/).filter(w => w.length > 3).slice(0, 4)
+            return `• ${words.join(' ')}`
+          })
+          setConvertedBullets(fallback)
+        } finally {
+          setConvertingBullets(false)
+        }
+      }
+      
+      convertToBulletPoints()
+    } else {
+      setConvertedBullets([])
+    }
+  }, [selectedGuide, viewMode])
+  
+  const compressUSP = (usp) => {
+    // Komprimiere USP-Titel und Beschreibung für Stichpunkte
+    const compressText = (text) => {
+      if (!text) return ''
+      let compressed = text.trim()
+      
+      // Entferne Artikel
+      compressed = compressed.replace(/\b(der|die|das|ein|eine|einen|einem|einer)\s+/gi, ' ')
+      
+      // Entferne häufige Präpositionen
+      compressed = compressed.replace(/\s+(für|von|mit|auf|in|zu|an|bei|über|unter)\s+/gi, ' ')
+      
+      // Entferne Hilfsverben
+      compressed = compressed.replace(/\s+(ist|sind|war|waren|wird|werden|hat|haben)\s+/gi, ' ')
+      
+      // Bereinige
+      compressed = compressed.replace(/\s+/g, ' ').trim()
+      
+      // Begrenze auf wichtige Keywords
+      if (compressed.length > 35) {
+        const words = compressed.split(/\s+/)
+        const important = words.filter(w => w.length > 3).slice(0, 5)
+        compressed = important.join(' ')
+      }
+      
+      return compressed
+    }
+    
+    return {
+      title: compressText(usp.title),
+      description: compressText(usp.description)
+    }
+  }
+
+  if (authLoading || loading) {
+    return <div className="loading">Lade Leitfäden...</div>
+  }
+
+  if (!user) {
+    return (
+      <div className="section-header">
+        <h2>Meine Leitfäden</h2>
+        <p>Bitte melde dich an, um deine Leitfäden zu sehen.</p>
+        <button className="btn" onClick={() => setShowAuthModal(true)}>Anmelden</button>
+      </div>
+    )
+  }
+
+  if (selectedGuide) {
+    return (
+      <div className="leitfaden-viewer-container">
+        <div className="leitfaden-viewer-header">
+          <button className="btn btn-outline" onClick={() => setSelectedGuide(null)}>← Zurück</button>
+          <h2>{selectedGuide.title}</h2>
+          <div className="leitfaden-viewer-actions">
+            <button 
+              className={`btn ${viewMode === 'full' ? 'btn-primary' : 'btn-outline'}`}
+              onClick={() => setViewMode('full')}
+            >
+              Vollständig
+            </button>
+            <button 
+              className={`btn ${viewMode === 'bullets' ? 'btn-primary' : 'btn-outline'}`}
+              onClick={() => setViewMode('bullets')}
+            >
+              Stichpunkte
+            </button>
+            <NavLink to={`/leitfaden/generator?edit=${selectedGuide.id}`} className="btn btn-outline">
+              Bearbeiten
+            </NavLink>
+          </div>
+        </div>
+        <div className="leitfaden-viewer-content">
+          {viewMode === 'full' ? (
+            <ol className="leitfaden-viewer-list">
+              {selectedGuide.items.map((item, idx) => (
+                <li key={idx} className="leitfaden-viewer-item">
+                  <span className="leitfaden-viewer-num">{idx + 1}.</span>
+                  <span className="leitfaden-viewer-text">{item.text}</span>
+                </li>
+              ))}
+            </ol>
+          ) : (
+            <div>
+              {convertingBullets ? (
+                <div className="loading-bullets">
+                  <p>Konvertiere zu Stichpunkten...</p>
+                </div>
+              ) : convertedBullets.length > 0 ? (
+                <ul className="leitfaden-viewer-bullets">
+                  {convertedBullets.map((bullet, idx) => (
+                    <li key={idx} className="leitfaden-viewer-bullet">{bullet}</li>
+                  ))}
+                </ul>
+              ) : (
+                <ul className="leitfaden-viewer-bullets">
+                  {selectedGuide.items.map((item, idx) => {
+                    // Fallback während Konvertierung
+                    const words = item.text.split(/\s+/).filter(w => w.length > 3).slice(0, 4)
+                    return (
+                      <li key={idx} className="leitfaden-viewer-bullet">• {words.join(' ')}</li>
+                    )
+                  })}
+                </ul>
+              )}
+            </div>
+          )}
+          {selectedGuide.usps && (
+            (() => {
+              // Normalisiere USPs (kann Array oder Objekt sein)
+              const usps = Array.isArray(selectedGuide.usps) 
+                ? { grundsaetzlich: selectedGuide.usps, gegenueberKonkurrenten: [], gegenueberAlterenMethoden: [] }
+                : selectedGuide.usps
+              
+              const grundsaetzlich = usps.grundsaetzlich || []
+              const gegenueberKonkurrenten = usps.gegenueberKonkurrenten || []
+              const gegenueberAlterenMethoden = usps.gegenueberAlterenMethoden || []
+              const hasAnyUSPs = grundsaetzlich.length > 0 || gegenueberKonkurrenten.length > 0 || gegenueberAlterenMethoden.length > 0
+              
+              if (!hasAnyUSPs) return null
+              
+              return (
+                <div className="leitfaden-viewer-usps">
+                  <h3>USPs</h3>
+                  
+                  {grundsaetzlich.length > 0 && (
+                    <div className="usp-category-section">
+                      <h4 className="usp-category-title">1. Grundsätzliche USPs</h4>
+                      <div className="usp-cards-grid">
+                        {grundsaetzlich.map((usp, idx) => {
+                          const compressedUSP = viewMode === 'bullets' ? compressUSP(usp) : usp
+                          return (
+                            <div key={`grund-${idx}`} className="usp-card">
+                              <div className="usp-card-header">
+                                <h6 className="usp-card-title">{compressedUSP.title}</h6>
+                              </div>
+                              <div className="usp-card-body">
+                                <p className="usp-card-description">{compressedUSP.description}</p>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {gegenueberKonkurrenten.length > 0 && (
+                    <div className="usp-category-section">
+                      <h4 className="usp-category-title">2. USPs gegenüber ähnlichen Konkurrenten</h4>
+                      <div className="usp-cards-grid">
+                        {gegenueberKonkurrenten.map((usp, idx) => {
+                          const compressedUSP = viewMode === 'bullets' ? compressUSP(usp) : usp
+                          return (
+                            <div key={`konkurrent-${idx}`} className="usp-card">
+                              <div className="usp-card-header">
+                                <h6 className="usp-card-title">{compressedUSP.title}</h6>
+                              </div>
+                              <div className="usp-card-body">
+                                <p className="usp-card-description">{compressedUSP.description}</p>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {gegenueberAlterenMethoden.length > 0 && (
+                    <div className="usp-category-section">
+                      <h4 className="usp-category-title">3. USPs gegenüber älteren Methoden</h4>
+                      <div className="usp-cards-grid">
+                        {gegenueberAlterenMethoden.map((usp, idx) => {
+                          const compressedUSP = viewMode === 'bullets' ? compressUSP(usp) : usp
+                          return (
+                            <div key={`alt-${idx}`} className="usp-card">
+                              <div className="usp-card-header">
+                                <h6 className="usp-card-title">{compressedUSP.title}</h6>
+                              </div>
+                              <div className="usp-card-body">
+                                <p className="usp-card-description">{compressedUSP.description}</p>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )
+            })()
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="meine-leitfaeden-container">
+      <div className="section-header">
+        <h2>Meine Leitfäden</h2>
+        <div className="meine-leitfaeden-actions">
+          <NavLink to="/leitfaden/generator" className="btn btn-primary">
+            + Neuer Leitfaden
+          </NavLink>
+        </div>
+      </div>
+      {guides.length === 0 ? (
+        <div className="meine-leitfaeden-empty">
+          <p>Du hast noch keine Leitfäden gespeichert.</p>
+          <NavLink to="/leitfaden/generator" className="btn btn-primary">
+            Ersten Leitfaden erstellen
+          </NavLink>
+        </div>
+      ) : (
+        <div className="meine-leitfaeden-list">
+          {guides.map((guide) => (
+            <div key={guide.id} className="meine-leitfaeden-item">
+              <div className="meine-leitfaeden-item-content">
+                <h3>{guide.title}</h3>
+                <p className="meine-leitfaeden-meta">
+                  {guide.items.length} Sätze • Erstellt: {new Date(guide.createdAt).toLocaleDateString('de-DE')}
+                </p>
+              </div>
+              <div className="meine-leitfaeden-item-actions">
+                <button className="btn btn-outline" onClick={() => setSelectedGuide(guide)}>
+                  Anzeigen
+                </button>
+                <NavLink to={`/leitfaden/generator?edit=${guide.id}`} className="btn btn-outline">
+                  Bearbeiten
+                </NavLink>
+                <button 
+                  className="btn btn-danger" 
+                  onClick={() => setShowDeleteConfirm(guide.id)}
+                >
+                  Löschen
+                </button>
+              </div>
+              {showDeleteConfirm === guide.id && (
+                <div className="meine-leitfaeden-delete-confirm">
+                  <p>Möchtest du diesen Leitfaden wirklich löschen?</p>
+                  <div className="meine-leitfaeden-delete-actions">
+                    <button className="btn btn-danger" onClick={() => handleDelete(guide.id)}>
+                      Ja, löschen
+                    </button>
+                    <button className="btn btn-outline" onClick={() => setShowDeleteConfirm(null)}>
+                      Abbrechen
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -4630,20 +5722,24 @@ function Cookies() {
 
 export default function App() {
   return (
-    <Layout>
-      <Routes>
-        <Route path="/" element={<Home />} />
-        <Route path="/training" element={<Training />} />
-        <Route path="/practice" element={<Practice />} />
-        <Route path="/scenarios" element={<Scenarios />} />
-        <Route path="/progress" element={<Progress />} />
-        <Route path="/leitfaden" element={<LeitfadenGenerator />} />
-        <Route path="/email-check" element={<EmailChecker />} />
-        <Route path="/kontakt" element={<Kontakt />} />
-        <Route path="/datenschutz" element={<Datenschutz />} />
-        <Route path="/impressum" element={<Impressum />} />
-        <Route path="/cookies" element={<Cookies />} />
-      </Routes>
-    </Layout>
+    <ToastProvider>
+      <Layout>
+        <Routes>
+          <Route path="/" element={<Home />} />
+          <Route path="/training" element={<Training />} />
+          <Route path="/practice" element={<Practice />} />
+          <Route path="/scenarios" element={<Scenarios />} />
+          <Route path="/progress" element={<Progress />} />
+          <Route path="/leitfaden" element={<LeitfadenOverview />} />
+          <Route path="/leitfaden/generator" element={<LeitfadenGenerator />} />
+          <Route path="/leitfaden/meine" element={<MeineLeitfaeden />} />
+          <Route path="/email-check" element={<EmailChecker />} />
+          <Route path="/kontakt" element={<Kontakt />} />
+          <Route path="/datenschutz" element={<Datenschutz />} />
+          <Route path="/impressum" element={<Impressum />} />
+          <Route path="/cookies" element={<Cookies />} />
+        </Routes>
+      </Layout>
+    </ToastProvider>
   )
 }

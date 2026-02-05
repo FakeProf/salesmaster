@@ -17,6 +17,8 @@ import cors from 'cors';
 import session from 'express-session';
 import cookieParser from 'cookie-parser';
 import { neon } from '@neondatabase/serverless';
+import nodeFetch from 'node-fetch';
+const fetch = nodeFetch.default || nodeFetch;
 
 const app = express();
 const PORT = process.env.PORT || 4001;
@@ -103,6 +105,18 @@ async function initializeDatabase() {
         total_answers INTEGER DEFAULT 0,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         UNIQUE(user_id, module_id)
+      )
+    `;
+
+    await sql`
+      CREATE TABLE IF NOT EXISTS user_guides (
+        id SERIAL PRIMARY KEY,
+        user_id VARCHAR(255) NOT NULL,
+        title VARCHAR(255) NOT NULL,
+        items JSONB NOT NULL,
+        usps JSONB,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `;
     
@@ -1591,6 +1605,761 @@ app.get('/api/insights/me', async (req, res) => {
   } catch (error) {
     console.error('Error fetching insights:', error);
     res.status(500).json({ error: 'Fehler beim Laden der Insights' });
+  }
+});
+
+// Leitfäden API-Endpunkte
+app.get('/api/guides/me', async (req, res) => {
+  try {
+    const userId = req.session?.user?.id;
+    if (!userId) {
+      return res.status(401).json({ error: 'Nicht angemeldet' });
+    }
+    if (!sql) {
+      return res.json({ guides: [] });
+    }
+    const guides = await sql`
+      SELECT id, title, items, usps, created_at, updated_at
+      FROM user_guides
+      WHERE user_id = ${String(userId)}
+      ORDER BY updated_at DESC
+    `;
+    res.json({ guides: guides.map(g => ({
+      id: g.id,
+      title: g.title,
+      items: g.items,
+      usps: g.usps,
+      createdAt: g.created_at,
+      updatedAt: g.updated_at
+    })) });
+  } catch (error) {
+    console.error('Error fetching guides:', error);
+    res.status(500).json({ error: 'Fehler beim Laden der Leitfäden' });
+  }
+});
+
+app.post('/api/guides', async (req, res) => {
+  try {
+    const userId = req.session?.user?.id;
+    if (!userId) {
+      return res.status(401).json({ error: 'Nicht angemeldet' });
+    }
+    if (!sql) {
+      return res.status(503).json({ error: 'Datenbank nicht verfügbar' });
+    }
+    const { title, items, usps } = req.body;
+    if (!title || !items || !Array.isArray(items)) {
+      return res.status(400).json({ error: 'Titel und Items sind erforderlich' });
+    }
+    const result = await sql`
+      INSERT INTO user_guides (user_id, title, items, usps)
+      VALUES (${String(userId)}, ${title}, ${JSON.stringify(items)}, ${usps ? JSON.stringify(usps) : null})
+      RETURNING id, title, items, usps, created_at, updated_at
+    `;
+    res.json({ 
+      success: true, 
+      guide: {
+        id: result[0].id,
+        title: result[0].title,
+        items: result[0].items,
+        usps: result[0].usps,
+        createdAt: result[0].created_at,
+        updatedAt: result[0].updated_at
+      }
+    });
+  } catch (error) {
+    console.error('Error saving guide:', error);
+    res.status(500).json({ error: 'Fehler beim Speichern des Leitfadens' });
+  }
+});
+
+app.put('/api/guides/:id', async (req, res) => {
+  try {
+    const userId = req.session?.user?.id;
+    if (!userId) {
+      return res.status(401).json({ error: 'Nicht angemeldet' });
+    }
+    if (!sql) {
+      return res.status(503).json({ error: 'Datenbank nicht verfügbar' });
+    }
+    const guideId = parseInt(req.params.id, 10);
+    if (Number.isNaN(guideId)) {
+      return res.status(400).json({ error: 'Ungültige Leitfaden-ID' });
+    }
+    const { title, items, usps } = req.body;
+    
+    // Prüfen ob Leitfaden dem User gehört
+    const existing = await sql`
+      SELECT user_id FROM user_guides WHERE id = ${guideId}
+    `;
+    if (!existing || existing.length === 0) {
+      return res.status(404).json({ error: 'Leitfaden nicht gefunden' });
+    }
+    if (existing[0].user_id !== String(userId)) {
+      return res.status(403).json({ error: 'Keine Berechtigung' });
+    }
+    
+    const result = await sql`
+      UPDATE user_guides
+      SET title = ${title}, items = ${JSON.stringify(items)}, usps = ${usps ? JSON.stringify(usps) : null}, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ${guideId} AND user_id = ${String(userId)}
+      RETURNING id, title, items, usps, created_at, updated_at
+    `;
+    if (result.length === 0) {
+      return res.status(404).json({ error: 'Leitfaden nicht gefunden' });
+    }
+    res.json({ 
+      success: true, 
+      guide: {
+        id: result[0].id,
+        title: result[0].title,
+        items: result[0].items,
+        usps: result[0].usps,
+        createdAt: result[0].created_at,
+        updatedAt: result[0].updated_at
+      }
+    });
+  } catch (error) {
+    console.error('Error updating guide:', error);
+    res.status(500).json({ error: 'Fehler beim Aktualisieren des Leitfadens' });
+  }
+});
+
+app.delete('/api/guides/:id', async (req, res) => {
+  try {
+    const userId = req.session?.user?.id;
+    if (!userId) {
+      return res.status(401).json({ error: 'Nicht angemeldet' });
+    }
+    if (!sql) {
+      return res.status(503).json({ error: 'Datenbank nicht verfügbar' });
+    }
+    const guideId = parseInt(req.params.id, 10);
+    if (Number.isNaN(guideId)) {
+      return res.status(400).json({ error: 'Ungültige Leitfaden-ID' });
+    }
+    const result = await sql`
+      DELETE FROM user_guides
+      WHERE id = ${guideId} AND user_id = ${String(userId)}
+      RETURNING id
+    `;
+    if (result.length === 0) {
+      return res.status(404).json({ error: 'Leitfaden nicht gefunden' });
+    }
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting guide:', error);
+    res.status(500).json({ error: 'Fehler beim Löschen des Leitfadens' });
+  }
+});
+
+// USP-Extraktion aus Website (mit Groq API - kostenlos)
+async function extractUSPsFromWebsite(websiteUrl, customInstructions = null) {
+  try {
+    console.log('Fetching website:', websiteUrl);
+    if (customInstructions && customInstructions.trim()) {
+      console.log('Custom instructions received:', customInstructions.substring(0, 100) + '...');
+    }
+    
+    // Website-Inhalt fetchen mit User-Agent Header (manche Websites blockieren Requests ohne User-Agent)
+    const response = await fetch(websiteUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+      }
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Website nicht erreichbar: HTTP ${response.status} - ${response.statusText}`);
+    }
+    
+    const html = await response.text();
+    console.log('Website fetched, HTML length:', html.length);
+    
+    if (!html || html.length < 100) {
+      throw new Error('Website-Inhalt zu kurz oder leer');
+    }
+    
+    // Einfache Text-Extraktion (kann später mit cheerio/jsdom verbessert werden)
+    const textContent = html
+      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .substring(0, 12000); // Limit für Groq (größer als OpenAI)
+    
+    if (!textContent || textContent.length < 50) {
+      throw new Error('Kein verwertbarer Text aus Website extrahiert');
+    }
+    
+    console.log('Text extracted, length:', textContent.length);
+    
+    // Groq API aufrufen (kostenlos)
+    const groqApiKey = process.env.GROQ_API_KEY;
+    if (!groqApiKey) {
+      throw new Error('GROQ_API_KEY nicht gesetzt. Bitte setze die Umgebungsvariable GROQ_API_KEY in deiner .env Datei.');
+    }
+    
+    // Erstelle den User-Prompt mit optionalen individuellen Anweisungen
+    let userPrompt = '';
+    
+    if (customInstructions && customInstructions.trim()) {
+      userPrompt += `⚠️ WICHTIGE ANWEISUNGEN - BITTE GENAU BEACHTEN:\n${customInstructions.trim()}\n\n`;
+      userPrompt += `Analysiere den folgenden Website-Inhalt NUR im Kontext der obigen Anweisungen:\n\n${textContent}\n\n`;
+    } else {
+      userPrompt = `Analysiere folgende Website-Inhalt und extrahiere USPs in drei Kategorien:\n\n${textContent}\n\n`;
+    }
+    
+    userPrompt += `Gib die USPs als JSON-Objekt zurück im Format:\n{\n  "grundsaetzlich": [{"title": "USP Titel", "description": "Beschreibung"}, ...],\n  "gegenueberKonkurrenten": [{"title": "USP Titel", "description": "Beschreibung"}, ...],\n  "gegenueberAlterenMethoden": [{"title": "USP Titel", "description": "Beschreibung"}, ...]\n}\n\n`;
+    
+    if (customInstructions && customInstructions.trim()) {
+      userPrompt += `WICHTIG: Berücksichtige bei der Extraktion die oben genannten Anweisungen. Extrahiere NUR USPs, die zu den Anweisungen passen. Ignoriere alle anderen Inhalte.\n\n`;
+    }
+    
+    userPrompt += `Analysiere den Inhalt sorgfältig und ordne die USPs den passenden Kategorien zu. Wenn eine Kategorie nicht zutrifft, gib ein leeres Array zurück.`;
+    
+    console.log('Calling Groq API...');
+    if (customInstructions && customInstructions.trim()) {
+      console.log('Prompt includes custom instructions');
+      console.log('User prompt preview:', userPrompt.substring(0, 300) + '...');
+    }
+    
+    const systemPrompt = customInstructions && customInstructions.trim()
+      ? 'Du bist ein Experte für Verkaufsargumente. Analysiere eine Unternehmenswebsite und extrahiere Unique Selling Points (USPs) in drei Kategorien: 1) Grundsätzliche USPs (allgemeine Alleinstellungsmerkmale), 2) USPs gegenüber ähnlichen Konkurrenten (Differenzierung), 3) USPs gegenüber älteren Methoden (Innovation/Modernisierung). WICHTIG: Wenn der Nutzer spezifische Anweisungen gibt, befolge diese GENAU und extrahiere NUR die USPs, die zu diesen Anweisungen passen. Ignoriere alle anderen Inhalte, die nicht zu den Anweisungen passen. Gib die USPs als strukturiertes JSON-Objekt zurück.'
+      : 'Du bist ein Experte für Verkaufsargumente. Analysiere eine Unternehmenswebsite und extrahiere Unique Selling Points (USPs) in drei Kategorien: 1) Grundsätzliche USPs (allgemeine Alleinstellungsmerkmale), 2) USPs gegenüber ähnlichen Konkurrenten (Differenzierung), 3) USPs gegenüber älteren Methoden (Innovation/Modernisierung). Gib die USPs als strukturiertes JSON-Objekt zurück.';
+    
+    const groqResponse = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${groqApiKey}`
+      },
+      body: JSON.stringify({
+        model: 'llama-3.1-8b-instant', // Kostenlos und sehr schnell (verfügbares Modell)
+        messages: [
+          {
+            role: 'system',
+            content: systemPrompt
+          },
+          {
+            role: 'user',
+            content: userPrompt
+          }
+        ],
+        temperature: 0.7,
+        max_tokens: 2000
+      })
+    });
+    
+    console.log('Groq API response status:', groqResponse.status);
+    
+    if (!groqResponse.ok) {
+      const errorData = await groqResponse.json().catch(() => ({}));
+      console.error('Groq API error:', errorData);
+      throw new Error(`Groq API Fehler (${groqResponse.status}): ${errorData.error?.message || JSON.stringify(errorData)}`);
+    }
+    
+    const groqData = await groqResponse.json();
+    const content = groqData.choices?.[0]?.message?.content;
+    
+    if (!content) {
+      console.error('No content in Groq response:', groqData);
+      throw new Error('Keine Antwort von Groq API erhalten');
+    }
+    
+    console.log('Groq response content length:', content.length);
+    console.log('Groq response preview:', content.substring(0, 300));
+    
+    // JSON aus Antwort extrahieren (kann Objekt oder Array sein)
+    let jsonMatch = content.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      // Fallback: Versuche Array zu finden
+      jsonMatch = content.match(/\[[\s\S]*\]/);
+    }
+    
+    if (jsonMatch) {
+      try {
+        const parsed = JSON.parse(jsonMatch[0]);
+        
+        // Wenn es ein Objekt mit Kategorien ist, gebe es so zurück
+        if (parsed.grundsaetzlich || parsed.gegenueberKonkurrenten || parsed.gegenueberAlterenMethoden) {
+          console.log('Successfully parsed categorized USPs:', {
+            grundsaetzlich: parsed.grundsaetzlich?.length || 0,
+            gegenueberKonkurrenten: parsed.gegenueberKonkurrenten?.length || 0,
+            gegenueberAlterenMethoden: parsed.gegenueberAlterenMethoden?.length || 0
+          });
+          return {
+            grundsaetzlich: parsed.grundsaetzlich || [],
+            gegenueberKonkurrenten: parsed.gegenueberKonkurrenten || [],
+            gegenueberAlterenMethoden: parsed.gegenueberAlterenMethoden || []
+          };
+        }
+        
+        // Wenn es ein Array ist (alte Format), konvertiere es
+        if (Array.isArray(parsed)) {
+          console.log('Found array format, converting to categorized format');
+          return {
+            grundsaetzlich: parsed,
+            gegenueberKonkurrenten: [],
+            gegenueberAlterenMethoden: []
+          };
+        }
+        
+        return parsed;
+      } catch (parseError) {
+        console.error('JSON parse error:', parseError);
+        throw new Error(`JSON-Parsing fehlgeschlagen: ${parseError.message}`);
+      }
+    }
+    
+    // Fallback: Versuche die gesamte Antwort zu parsen
+    try {
+      const parsed = JSON.parse(content);
+      if (parsed.grundsaetzlich || parsed.gegenueberKonkurrenten || parsed.gegenueberAlterenMethoden) {
+        return {
+          grundsaetzlich: parsed.grundsaetzlich || [],
+          gegenueberKonkurrenten: parsed.gegenueberKonkurrenten || [],
+          gegenueberAlterenMethoden: parsed.gegenueberAlterenMethoden || []
+        };
+      }
+      if (Array.isArray(parsed)) {
+        return {
+          grundsaetzlich: parsed,
+          gegenueberKonkurrenten: [],
+          gegenueberAlterenMethoden: []
+        };
+      }
+      return parsed;
+    } catch (parseError) {
+      console.error('Fallback JSON parse error:', parseError);
+      throw new Error(`Konnte keine gültigen USPs aus der Antwort extrahieren. Antwort: ${content.substring(0, 500)}`);
+    }
+  } catch (error) {
+    console.error('Error extracting USPs:', error);
+    console.error('Error stack:', error.stack);
+    throw error;
+  }
+}
+
+// Challenge-Bewertung mit KI
+app.post('/api/practice/evaluate-challenge', async (req, res) => {
+  try {
+    const userId = req.session?.user?.id;
+    if (!userId) {
+      return res.status(401).json({ error: 'Nicht angemeldet' });
+    }
+    const { challengeTitle, situation, answer, criteria } = req.body;
+    
+    if (!answer || !answer.trim()) {
+      return res.status(400).json({ error: 'Antwort ist erforderlich' });
+    }
+    
+    if (!criteria || !Array.isArray(criteria) || criteria.length === 0) {
+      return res.status(400).json({ error: 'Bewertungskriterien sind erforderlich' });
+    }
+    
+    const groqApiKey = process.env.GROQ_API_KEY;
+    if (!groqApiKey) {
+      return res.status(500).json({ error: 'GROQ_API_KEY nicht gesetzt' });
+    }
+    
+    console.log('Evaluating challenge answer:', {
+      challengeTitle,
+      situation: situation?.substring(0, 100),
+      criteriaCount: criteria?.length,
+      answerLength: answer?.length
+    });
+    
+    if (!criteria || !Array.isArray(criteria) || criteria.length === 0) {
+      console.error('Invalid criteria:', criteria);
+      return res.status(400).json({ error: 'Ungültige Bewertungskriterien' });
+    }
+    
+    // Erstelle den Prompt für die Bewertung
+    const criteriaList = criteria.map((c, idx) => `${idx + 1}. ${c} (0-5 Punkte)`).join('\n');
+    
+    const userPrompt = `Du bist ein Experte für Verkaufstraining. Bewerte die folgende Verkaufsantwort nach den gegebenen Kriterien:
+
+**Situation/Kundenaussage:**
+${situation}
+
+**Antwort des Verkäufers:**
+${answer}
+
+**Bewertungskriterien:**
+${criteriaList}
+
+**Aufgabe:**
+1. Bewerte jeden Punkt von 0-5 Punkten
+2. Gib konstruktives Feedback zur gegebenen Antwort
+3. Erstelle eine BEISPIELANTWORT, die der Verkäufer hätte geben können, um 15/15 Punkte zu erreichen
+
+**WICHTIG für die Beispielantwort:**
+- Die Beispielantwort muss eine VOLLSTÄNDIGE Antwort des Verkäufers sein (nicht nur die Situation wiederholen!)
+- Sie muss direkt auf die Situation "${situation}" antworten
+- Sie muss alle Bewertungskriterien perfekt erfüllen
+- Sie sollte konkret, überzeugend und wertorientiert sein
+- Sie sollte zeigen, wie man optimal auf die Kundenaussage reagiert
+
+Gib die Antwort als JSON-Objekt zurück im Format:
+{
+  "scores": {
+    "${criteria[0]}": <0-5>,
+    "${criteria[1]}": <0-5>,
+    "${criteria[2]}": <0-5>
+  },
+  "totalScore": <Summe aller Punkte>,
+  "feedback": "<Konstruktives Feedback zur gegebenen Antwort, was gut war und was verbessert werden kann>",
+  "bestAnswer": "<VOLLSTÄNDIGE Beispielantwort des Verkäufers, die direkt auf die Situation antwortet und alle Kriterien perfekt erfüllt. NICHT die Situation wiederholen, sondern eine echte Verkäuferantwort geben!>"
+}`;
+    
+    const groqResponse = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${groqApiKey}`
+      },
+      body: JSON.stringify({
+        model: 'llama-3.1-8b-instant',
+        messages: [
+          {
+            role: 'system',
+            content: 'Du bist ein Experte für Verkaufstraining und Bewertung von Verkaufsgesprächen. Bewerte Antworten objektiv, konstruktiv und hilfreich. Gib immer konkrete Verbesserungsvorschläge. Wenn du eine Beispielantwort erstellst, muss diese eine VOLLSTÄNDIGE Antwort des Verkäufers sein, die direkt auf die Kundenaussage reagiert - nicht nur die Situation wiederholen!'
+          },
+          {
+            role: 'user',
+            content: userPrompt
+          }
+        ],
+        temperature: 0.7,
+        max_tokens: 1500
+      })
+    });
+    
+    if (!groqResponse.ok) {
+      const errorData = await groqResponse.json().catch(() => ({}));
+      throw new Error(`Groq API Fehler: ${groqResponse.status} - ${JSON.stringify(errorData)}`);
+    }
+    
+    const groqData = await groqResponse.json();
+    const content = groqData.choices?.[0]?.message?.content;
+    
+    if (!content) {
+      throw new Error('Keine Antwort von Groq API');
+    }
+    
+    // JSON aus Antwort extrahieren
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      let evaluation;
+      try {
+        evaluation = JSON.parse(jsonMatch[0]);
+      } catch (parseError) {
+        console.error('JSON parse error:', parseError);
+        console.error('Content:', content.substring(0, 500));
+        throw new Error(`JSON-Parsing fehlgeschlagen: ${parseError.message}`);
+      }
+      
+      console.log('Parsed evaluation:', JSON.stringify(evaluation, null, 2));
+      
+      // Prüfe, ob bestAnswer die Situation wiederholt (Fehler der KI)
+      if (evaluation.bestAnswer && typeof evaluation.bestAnswer === 'string') {
+        const situationLower = situation.toLowerCase().trim();
+        const bestAnswerLower = evaluation.bestAnswer.toLowerCase().trim();
+        // Wenn die Beispielantwort zu ähnlich zur Situation ist, markiere es
+        if (bestAnswerLower.includes(situationLower.substring(0, 20)) || 
+            situationLower.includes(bestAnswerLower.substring(0, 20))) {
+          console.warn('WARNING: bestAnswer seems to be a copy of the situation, not a real answer');
+        }
+      }
+      
+      // Validiere und normalisiere die Bewertung
+      const normalizedScores = {};
+      let totalScore = 0;
+      
+      criteria.forEach((criterion, idx) => {
+        const score = evaluation.scores?.[criterion] || evaluation.scores?.[idx] || 0;
+        const normalizedScore = Math.max(0, Math.min(5, Math.round(score)));
+        normalizedScores[criterion] = normalizedScore;
+        totalScore += normalizedScore;
+      });
+      
+      // Stelle sicher, dass feedback und bestAnswer Strings sind
+      let feedbackText = evaluation.feedback || 'Kein Feedback verfügbar.';
+      if (typeof feedbackText !== 'string') {
+        // Wenn es ein Objekt ist, versuche den Text zu extrahieren
+        if (typeof feedbackText === 'object' && feedbackText !== null) {
+          // Versuche verschiedene mögliche Keys
+          feedbackText = feedbackText.text || feedbackText.message || feedbackText.content || 
+                        feedbackText.feedback || Object.values(feedbackText)[0] || 
+                        JSON.stringify(feedbackText);
+          // Stelle sicher, dass es ein String ist
+          if (typeof feedbackText !== 'string') {
+            feedbackText = String(feedbackText);
+          }
+        } else {
+          feedbackText = String(feedbackText);
+        }
+      }
+      
+      let bestAnswerText = evaluation.bestAnswer || null;
+      if (bestAnswerText && typeof bestAnswerText !== 'string') {
+        // Wenn es ein Objekt ist, versuche den Text zu extrahieren
+        if (typeof bestAnswerText === 'object' && bestAnswerText !== null) {
+          // Versuche verschiedene mögliche Keys
+          bestAnswerText = bestAnswerText.text || bestAnswerText.message || bestAnswerText.content || 
+                         bestAnswerText.answer || bestAnswerText.bestAnswer || Object.values(bestAnswerText)[0] || 
+                         JSON.stringify(bestAnswerText);
+          // Stelle sicher, dass es ein String ist
+          if (typeof bestAnswerText !== 'string') {
+            bestAnswerText = String(bestAnswerText);
+          }
+        } else {
+          bestAnswerText = String(bestAnswerText);
+        }
+      }
+      
+      // Prüfe, ob bestAnswer nur die Situation wiederholt (Fehler der KI)
+      if (bestAnswerText && typeof bestAnswerText === 'string') {
+        const situationLower = situation.toLowerCase().trim();
+        const bestAnswerLower = bestAnswerText.toLowerCase().trim();
+        // Wenn die Beispielantwort zu ähnlich zur Situation ist, generiere eine neue
+        if (bestAnswerLower === situationLower || 
+            bestAnswerLower.includes(situationLower.substring(0, 30)) && bestAnswerLower.length < situationLower.length + 50) {
+          console.warn('bestAnswer is too similar to situation, will request regeneration');
+          // Setze bestAnswer auf null, damit es neu generiert wird
+          bestAnswerText = null;
+        }
+      }
+      
+      // Wenn bestAnswer fehlt oder ungültig ist, generiere eine neue
+      if (!bestAnswerText || bestAnswerText.trim().length < 20) {
+        console.log('bestAnswer missing or too short, generating new one...');
+        try {
+          // Zweiter API-Call nur für die Beispielantwort
+          const bestAnswerPrompt = `Erstelle eine VOLLSTÄNDIGE Beispielantwort für einen Verkäufer, die auf folgende Kundenaussage reagiert:
+
+**Kundenaussage:**
+${situation}
+
+**Bewertungskriterien (alle müssen erfüllt werden):**
+${criteriaList}
+
+Die Antwort muss:
+- Direkt auf die Kundenaussage eingehen
+- Alle Kriterien perfekt erfüllen
+- Konkret, überzeugend und wertorientiert sein
+- Eine echte Verkäuferantwort sein (nicht die Situation wiederholen!)
+
+Gib NUR die Antwort zurück, ohne zusätzlichen Text oder Erklärungen.`;
+
+          const bestAnswerResponse = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${groqApiKey}`
+            },
+            body: JSON.stringify({
+              model: 'llama-3.1-8b-instant',
+              messages: [
+                {
+                  role: 'system',
+                  content: 'Du bist ein Experte für Verkaufsgespräche. Erstelle optimale Verkäuferantworten, die direkt auf Kundenaussagen reagieren.'
+                },
+                {
+                  role: 'user',
+                  content: bestAnswerPrompt
+                }
+              ],
+              temperature: 0.7,
+              max_tokens: 300
+            })
+          });
+          
+          if (bestAnswerResponse.ok) {
+            const bestAnswerData = await bestAnswerResponse.json();
+            let bestAnswerContent = bestAnswerData.choices?.[0]?.message?.content;
+            
+            // Entferne mögliche Markdown-Formatierung oder Anführungszeichen
+            if (bestAnswerContent) {
+              bestAnswerContent = bestAnswerContent.trim()
+                .replace(/^["']|["']$/g, '') // Entferne Anführungszeichen am Anfang/Ende
+                .replace(/^```[\w]*\n?|\n?```$/g, '') // Entferne Code-Blöcke
+                .trim();
+            }
+            
+            if (bestAnswerContent && bestAnswerContent.length > 20) {
+              // Prüfe nochmal, ob es nicht die Situation ist
+              const situationLower = situation.toLowerCase().trim();
+              const answerLower = bestAnswerContent.toLowerCase().trim();
+              
+              if (answerLower !== situationLower && 
+                  !(answerLower.includes(situationLower.substring(0, 30)) && answerLower.length < situationLower.length + 50)) {
+                bestAnswerText = bestAnswerContent;
+                console.log('Generated new bestAnswer:', bestAnswerText.substring(0, 100));
+              } else {
+                console.warn('Generated answer is still too similar to situation, using fallback');
+                bestAnswerText = 'Eine optimale Antwort würde direkt auf die Kundenaussage eingehen, alle Bewertungskriterien erfüllen und wertorientiert sein.';
+              }
+            }
+          }
+        } catch (bestAnswerError) {
+          console.error('Error generating bestAnswer:', bestAnswerError);
+          // Fallback: Verwende einen Platzhalter
+          bestAnswerText = 'Eine optimale Antwort würde direkt auf die Kundenaussage eingehen, alle Bewertungskriterien erfüllen und wertorientiert sein.';
+        }
+      }
+      
+      const result = {
+        scores: normalizedScores,
+        totalScore: totalScore,
+        feedback: feedbackText,
+        bestAnswer: bestAnswerText
+      };
+      
+      console.log('Challenge evaluation successful:', {
+        scores: result.scores,
+        totalScore: result.totalScore,
+        feedbackLength: result.feedback?.length,
+        bestAnswerLength: result.bestAnswer?.length,
+        bestAnswerPreview: result.bestAnswer?.substring(0, 100)
+      });
+      res.json({ success: true, evaluation: result });
+    } else {
+      throw new Error('Konnte keine Bewertung aus der Antwort extrahieren');
+    }
+  } catch (error) {
+    console.error('Error evaluating challenge:', error);
+    res.status(500).json({ 
+      error: 'Fehler bei der Bewertung', 
+      message: error.message 
+    });
+  }
+});
+
+// Stichpunkte-Konvertierung mit KI
+app.post('/api/guides/convert-to-bullets', async (req, res) => {
+  try {
+    const userId = req.session?.user?.id;
+    if (!userId) {
+      return res.status(401).json({ error: 'Nicht angemeldet' });
+    }
+    const { items } = req.body;
+    if (!items || !Array.isArray(items)) {
+      return res.status(400).json({ error: 'Items Array ist erforderlich' });
+    }
+    
+    const groqApiKey = process.env.GROQ_API_KEY;
+    if (!groqApiKey) {
+      return res.status(500).json({ error: 'GROQ_API_KEY nicht gesetzt' });
+    }
+    
+    // Erstelle Text aus allen Items
+    const fullText = items.map(item => item.text).join('\n');
+    
+    console.log('Converting to bullets with AI, text length:', fullText.length);
+    
+    const groqResponse = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${groqApiKey}`
+      },
+      body: JSON.stringify({
+        model: 'llama-3.1-8b-instant',
+        messages: [
+          {
+            role: 'system',
+            content: 'Du bist ein Experte für kompakte Verkaufsformulierungen. Konvertiere Verkaufssätze in extrem kompakte Stichpunkte, die nur die wichtigsten Keywords enthalten. Der Sinn muss erhalten bleiben, aber verwende so wenig Wörter wie möglich. Entferne alle Füllwörter, Höflichkeitsfloskeln und überflüssige Artikel.'
+          },
+          {
+            role: 'user',
+            content: `Konvertiere folgende Verkaufssätze in extrem kompakte Stichpunkte (nur Keywords, Sinn erhalten):\n\n${fullText}\n\nGib die Stichpunkte als JSON-Array zurück im Format: ["Stichpunkt 1", "Stichpunkt 2", ...]\n\nJeder Stichpunkt sollte maximal 4-6 Wörter enthalten und nur die Kernaussage transportieren.`
+          }
+        ],
+        temperature: 0.5,
+        max_tokens: 1500
+      })
+    });
+    
+    if (!groqResponse.ok) {
+      const errorData = await groqResponse.json().catch(() => ({}));
+      throw new Error(`Groq API Fehler: ${groqResponse.status} - ${JSON.stringify(errorData)}`);
+    }
+    
+    const groqData = await groqResponse.json();
+    const content = groqData.choices?.[0]?.message?.content;
+    
+    if (!content) {
+      throw new Error('Keine Antwort von Groq API');
+    }
+    
+    // JSON aus Antwort extrahieren
+    const jsonMatch = content.match(/\[[\s\S]*\]/);
+    if (jsonMatch) {
+      const bullets = JSON.parse(jsonMatch[0]);
+      console.log('Successfully converted to bullets:', bullets.length);
+      res.json({ success: true, bullets });
+    } else {
+      throw new Error('Konnte keine Stichpunkte aus der Antwort extrahieren');
+    }
+  } catch (error) {
+    console.error('Error converting to bullets:', error);
+    res.status(500).json({ 
+      error: 'Fehler bei der Stichpunkte-Konvertierung', 
+      message: error.message 
+    });
+  }
+});
+
+app.post('/api/guides/extract-usps', async (req, res) => {
+  try {
+    const userId = req.session?.user?.id;
+    if (!userId) {
+      return res.status(401).json({ error: 'Nicht angemeldet' });
+    }
+    const { websiteUrl, instructions } = req.body;
+    if (!websiteUrl) {
+      return res.status(400).json({ error: 'Website-URL ist erforderlich' });
+    }
+    
+    // URL validieren
+    let url;
+    try {
+      url = new URL(websiteUrl);
+      if (!['http:', 'https:'].includes(url.protocol)) {
+        return res.status(400).json({ error: 'Nur HTTP/HTTPS URLs erlaubt' });
+      }
+    } catch {
+      return res.status(400).json({ error: 'Ungültige URL' });
+    }
+    
+    console.log('Starting USP extraction for URL:', url.toString());
+    if (instructions && instructions.trim()) {
+      console.log('With custom instructions:', instructions);
+    } else {
+      console.log('No custom instructions provided');
+    }
+    const usps = await extractUSPsFromWebsite(url.toString(), instructions);
+    const totalCount = (usps.grundsaetzlich?.length || 0) + 
+                      (usps.gegenueberKonkurrenten?.length || 0) + 
+                      (usps.gegenueberAlterenMethoden?.length || 0);
+    console.log('USP extraction successful, found', totalCount, 'USPs');
+    res.json({ success: true, usps });
+  } catch (error) {
+    console.error('Error extracting USPs:', error);
+    console.error('Error details:', {
+      message: error.message,
+      stack: error.stack,
+      websiteUrl: req.body.websiteUrl,
+      userId: req.session?.user?.id
+    });
+    const errorMessage = error.message || 'Unbekannter Fehler';
+    res.status(500).json({ 
+      error: 'Fehler bei der USP-Extraktion', 
+      message: errorMessage,
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
   }
 });
 
