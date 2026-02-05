@@ -10,7 +10,7 @@ const serverlessHttp = require('serverless-http');
 let serverlessPromise = null;
 function getServerless() {
   if (!serverlessPromise) {
-    serverlessPromise = import('./backend-bundle.mjs').then(function (mod) {
+    serverlessPromise = import('./lib/backend-bundle.mjs').then(function (mod) {
       const app = mod && mod.app;
       return app ? serverlessHttp(app) : serverlessHttp(mod);
     });
