@@ -2001,8 +2001,11 @@ ${criteriaList}
 3. Erstelle eine BEISPIELANTWORT, die der Verkäufer hätte geben können, um 15/15 Punkte zu erreichen
 
 **KRITISCH WICHTIG für die Beispielantwort - Professionelle Verkaufsstimme:**
-- Die Beispielantwort muss eine VOLLSTÄNDIGE Antwort des Verkäufers sein (nicht nur die Situation wiederholen!)
-- Sie muss direkt auf die Situation "${situation}" antworten
+- Die Beispielantwort muss eine VOLLSTÄNDIGE Antwort des Verkäufers sein - sie darf NICHT die Situation/Kundenaussage wiederholen oder paraphrasieren!
+- Sie muss direkt auf die Situation "${situation}" reagieren, aber OHNE sie zu wiederholen
+- **LOGISCHE KONSISTENZ:** Die Antwort muss logisch konsistent sein - keine widersprüchlichen Aussagen!
+  - Beispiel: Wenn der Kunde sagt "zu teuer", dann NICHT "wir sind günstiger" sagen (das wäre ein Widerspruch)
+  - Stattdessen: Den Wert/M Nutzen kommunizieren, ohne den Preis zu bestreiten
 - Sie muss alle Bewertungskriterien perfekt erfüllen
 - **SELBSTBEWUSST & PROFESSIONELL:** Die Antwort soll selbstbewusst und professionell klingen, NICHT defensiv oder rechtfertigend
 - **WERTORIENTIERT:** Fokus auf den Mehrwert für den Kunden, nicht auf Rechtfertigung oder Entschuldigungen
@@ -2021,7 +2024,7 @@ Gib die Antwort als JSON-Objekt zurück im Format:
   },
   "totalScore": <Summe aller Punkte>,
   "feedback": "<Konstruktives Feedback zur gegebenen Antwort, was gut war und was verbessert werden kann. Achte darauf, ob die Antwort defensiv oder rechtfertigend klingt - das sollte vermieden werden.>",
-  "bestAnswer": "<VOLLSTÄNDIGE Beispielantwort des Verkäufers, die direkt auf die Situation antwortet und alle Kriterien perfekt erfüllt. Die Antwort muss SELBSTBEWUSST, PROFESSIONELL und WERTORIENTIERT sein - NICHT defensiv oder rechtfertigend. Zeige, dass der Verkäufer ein Experte ist, der dem Kunden hilft, nicht jemand der um den Kunden kämpft.>"
+  "bestAnswer": "<VOLLSTÄNDIGE Beispielantwort des Verkäufers, die direkt auf die Situation antwortet und alle Kriterien perfekt erfüllt. WICHTIG: Die Antwort darf NICHT die Situation/Kundenaussage wiederholen oder paraphrasieren! Sie muss LOGISCH KONSISTENT sein - keine widersprüchlichen Aussagen. Die Antwort muss SELBSTBEWUSST, PROFESSIONELL und WERTORIENTIERT sein - NICHT defensiv oder rechtfertigend. Zeige, dass der Verkäufer ein Experte ist, der dem Kunden hilft, nicht jemand der um den Kunden kämpft.>"
 }`;
     
     const groqResponse = await fetch('https://api.groq.com/openai/v1/chat/completions', {
@@ -2157,7 +2160,10 @@ ${situation}
 ${criteriaList}
 
 Die Antwort muss:
-- Direkt auf die Kundenaussage eingehen
+- Direkt auf die Kundenaussage eingehen, aber OHNE sie zu wiederholen oder zu paraphrasieren
+- LOGISCH KONSISTENT sein - keine widersprüchlichen Aussagen!
+  - Beispiel: Wenn Kunde sagt "zu teuer", dann NICHT "wir sind günstiger" (Widerspruch!)
+  - Stattdessen: Wert/M Nutzen kommunizieren, ohne Preis zu bestreiten
 - Alle Kriterien perfekt erfüllen
 - SELBSTBEWUSST und PROFESSIONELL sein - NICHT defensiv oder rechtfertigend
 - WERTORIENTIERT: Fokus auf den Mehrwert für den Kunden, nicht auf Entschuldigungen
@@ -2167,14 +2173,17 @@ Die Antwort muss:
 - Eine echte Verkäuferantwort sein (nicht die Situation wiederholen!)
 
 VERMEIDE:
+- Die Situation/Kundenaussage zu wiederholen oder zu paraphrasieren
+- Widersprüchliche Aussagen (z.B. "Sie sagen X, aber wir sind Y" wenn das nicht logisch passt)
 - Rechtfertigungen ("Ich verstehe Ihre Bedenken", "Lassen Sie mich erklären")
 - Defensive Formulierungen ("Wir sind wirklich gut", "Bitte geben Sie uns eine Chance")
 - Bittende Töne ("Es wäre toll, wenn...", "Könnten Sie vielleicht...")
 
 STATTDESSEN:
-- Fakten und konkrete Nutzen präsentieren
+- Direkt mit Fakten und konkretem Nutzen beginnen
 - Lösungen anbieten, die den Kunden weiterbringen
 - Selbstbewusst und expertenhaft kommunizieren
+- Logisch konsistent argumentieren
 
 Gib NUR die Antwort zurück, ohne zusätzlichen Text oder Erklärungen.`;
 
