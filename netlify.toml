@@ -6,9 +6,9 @@
 [build.environment]
   NODE_VERSION = "18.19.0"
 
-# Backend-Function: Netlify bündelt selbst mit esbuild; backend-bundle.mjs wird als external mit gepackt
+# Backend-Function: server.js wird von build-function.js gebündelt (ein CJS-Bundle inkl. Backend)
 [functions]
-  node_bundler = "esbuild"
+  node_bundler = "none"
 [functions.server]
   timeout = 26
 

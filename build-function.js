@@ -1,7 +1,6 @@
 /**
- * 1) Backend als ESM-Bundle (unterstützt Top-Level-Await) → backend-bundle.mjs (ohne Punkt im Namen für Netlify).
- * 2) Server als CJS aus netlify/server-source.js, lädt Backend per import('./backend-bundle.mjs').
- * Nur server.js und backend-bundle.mjs liegen in netlify/functions/ (gültige Function-Namen).
+ * Backend und Server zu einem einzigen CJS-Bundle bündeln (kein Top-Level-Await mehr).
+ * Netlify kann dann mit node_bundler = "none" deployen - alles in einer Datei.
  */
 const esbuild = require('esbuild');
 const path = require('path');
@@ -9,21 +8,11 @@ const fs = require('fs');
 
 const functionsDir = path.join(__dirname, 'netlify', 'functions');
 fs.mkdirSync(functionsDir, { recursive: true });
-const backendBundle = path.join(functionsDir, 'backend-bundle.mjs');
 const serverEntry = path.join(__dirname, 'netlify', 'server-source.js');
 const serverOut = path.join(functionsDir, 'server.js');
 
 async function build() {
-  await esbuild.build({
-    entryPoints: [path.join(__dirname, 'backend', 'index.js')],
-    bundle: true,
-    platform: 'node',
-    format: 'esm',
-    outfile: backendBundle,
-    target: 'node18',
-  });
-  console.log('Backend bundle:', backendBundle);
-
+  // Backend direkt in server.js einbinden (kein separater Import mehr)
   await esbuild.build({
     entryPoints: [serverEntry],
     bundle: true,
@@ -31,9 +20,10 @@ async function build() {
     format: 'cjs',
     outfile: serverOut,
     target: 'node18',
-    external: ['./backend-bundle.mjs'],
+    // Backend wird automatisch eingebunden, da server-source.js es importiert
+    external: [], // Alles bündeln
   });
-  console.log('Server bundle:', serverOut);
+  console.log('Server bundle (inkl. Backend):', serverOut);
 }
 
 build().catch((err) => {

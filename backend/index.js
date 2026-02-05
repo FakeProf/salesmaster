@@ -2,11 +2,17 @@ import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+// __dirname für ESM (wird beim Bundling zu CJS konvertiert)
+let __dirname;
+try {
+  __dirname = path.dirname(fileURLToPath(import.meta.url));
+} catch {
+  __dirname = process.cwd(); // Fallback für CJS-Bundle
+}
 dotenv.config({ path: path.join(__dirname, '.env') });
 
 import crypto from 'crypto';
-import express from 'express';
+ import express from 'express';
 import cors from 'cors';
 import session from 'express-session';
 import cookieParser from 'cookie-parser';
@@ -131,16 +137,24 @@ const isNetlify = process.env.NETLIFY === 'true' || process.env.NETLIFY === true
 if (isNetlify && !process.env.SESSION_SECRET) {
   console.warn('SESSION_SECRET nicht gesetzt – es wird ein Standardwert genutzt. Für Produktion in Netlify unter Environment variables setzen.');
 }
+
+// Cookie-Session lazy laden (kein Top-Level-Await für Netlify-Bundling)
+let cookieSessionMiddleware = null;
 if (isNetlify) {
-  const cookieSession = (await import('cookie-session')).default;
-  app.use(cookieSession({
-    name: 'session',
-    keys: [sessionSecret],
-    maxAge: 7 * 24 * 60 * 60 * 1000,
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
-  }));
+  app.use(async (req, res, next) => {
+    if (!cookieSessionMiddleware) {
+      const cookieSession = (await import('cookie-session')).default;
+      cookieSessionMiddleware = cookieSession({
+        name: 'session',
+        keys: [sessionSecret],
+        maxAge: 7 * 24 * 60 * 60 * 1000,
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+      });
+    }
+    return cookieSessionMiddleware(req, res, next);
+  });
 } else {
   app.use(session({
     secret: sessionSecret,
@@ -1580,13 +1594,21 @@ app.get('/api/insights/me', async (req, res) => {
   }
 });
 
+// DB-Init lazy beim ersten Request (kein Top-Level-Await für Netlify-Bundling)
+let dbInitPromise = null;
 if (isNetlify) {
-  try {
-    await initializeDatabase();
-  } catch (e) {
-    console.error('Netlify DB init error:', e?.message || e);
-    // App trotzdem exportieren, Register/Login antworten dann mit 503
-  }
+  app.use(async (req, res, next) => {
+    if (!dbInitPromise && sql) {
+      dbInitPromise = initializeDatabase().catch((e) => {
+        console.error('Netlify DB init error:', e?.message || e);
+        return null;
+      });
+    }
+    if (dbInitPromise) {
+      await dbInitPromise;
+    }
+    next();
+  });
 }
 
 export { app };
