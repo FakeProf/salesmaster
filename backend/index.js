@@ -305,21 +305,21 @@ app.post('/auth/logout', (req, res) => {
 const scenarios = [
   { 
     id: 'buchhaltung', 
-    title: 'Buchhaltung - Digitale Belegverarbeitung', 
+    title: 'Buchhaltung - Fachinfodienst für GoBD-Compliance', 
     industry: 'finance', 
     difficulty: 'beginner',
-    description: 'Digitale Buchhaltungslösung mit GoBD-Konformität verkaufen',
-    situation: 'Sie präsentieren eine Lösung zur digitalen Belegverarbeitung an ein mittelständisches Unternehmen',
-    challenge: 'Die Buchhaltung zweifelt an GoBD-Konformität und Datenqualität',
-    goal: 'Vertrag über 15.000€/Jahr für digitale Buchhaltungslösung abschließen',
+    description: 'Fachinfodienst für Buchhaltung mit kostenlosem Testzeitraum verkaufen',
+    situation: 'Sie präsentieren einen Fachinfodienst für Buchhaltung und GoBD-Compliance an ein mittelständisches Unternehmen',
+    challenge: 'Die Buchhaltung zweifelt am Nutzen und der Aktualität der Informationen',
+    goal: 'Abonnement für Fachinfodienst abschließen - kostenloser Testzeitraum, danach kann die Zeitschrift behalten werden',
     timeLimit: 12,
     stakeholders: ['Buchhalter', 'Geschäftsführer', 'Steuerberater'],
-    objections: ['GoBD-Konformität unklar', 'Zu teuer für kleine Firma', 'Datenschutz-Bedenken', 'Zu komplex'],
+    objections: ['Nutzen unklar', 'Zu teuer für kleine Firma', 'Aktualität der Informationen', 'Brauchen wir nicht'],
     questions: [
-      'Wie verwalten Sie aktuell Ihre Belege?',
-      'Welche GoBD-Anforderungen sind Ihnen wichtig?',
-      'Wie hoch ist Ihr manueller Aufwand?',
-      'Wer prüft Ihre Buchhaltung?'
+      'Wie informieren Sie sich aktuell über GoBD-Anforderungen?',
+      'Welche Informationsquellen nutzen Sie für Buchhaltung?',
+      'Wie aktuell müssen Ihre Informationen sein?',
+      'Wer entscheidet über Fachinfodienste?'
     ],
     phases: [
       {
@@ -334,9 +334,9 @@ const scenarios = [
             description: 'Wie eröffnen Sie das Gespräch professionell?',
             question: 'Sie treffen auf den Buchhalter. Wie beginnen Sie das Gespräch?',
             options: [
-              { id: 1, text: '„Hallo, ich möchte Ihnen unsere Lösung vorstellen."', correct: false, feedback: 'Zu direkt. Fehlt die persönliche Ansprache.' },
-              { id: 2, text: '„Guten Tag, vielen Dank für Ihre Zeit. Wie läuft Ihre aktuelle Belegverwaltung?"', correct: true, feedback: 'Perfekt! Offene Frage, zeigt Interesse am Kunden.' },
-              { id: 3, text: '„Ich habe eine tolle Lösung für Sie."', correct: false, feedback: 'Zu verkaufsorientiert. Kunde fühlt sich unter Druck gesetzt.' }
+              { id: 1, text: '„Hallo, ich möchte Ihnen unseren Fachinfodienst vorstellen."', correct: false, feedback: 'Zu direkt. Fehlt die persönliche Ansprache.' },
+              { id: 2, text: '„Guten Tag, vielen Dank für Ihre Zeit. Wie informieren Sie sich aktuell über GoBD-Anforderungen und Buchhaltungsthemen?"', correct: true, feedback: 'Perfekt! Offene Frage, zeigt Interesse am Kunden.' },
+              { id: 3, text: '„Ich habe eine tolle Zeitschrift für Sie."', correct: false, feedback: 'Zu verkaufsorientiert. Kunde fühlt sich unter Druck gesetzt.' }
             ]
           },
           {
@@ -344,10 +344,10 @@ const scenarios = [
             type: 'objection',
             title: 'Erster Einwand',
             description: 'Der Buchhalter zeigt Skepsis',
-            question: 'Der Buchhalter sagt: "Wir haben schon ein System, das funktioniert." Wie reagieren Sie?',
+            question: 'Der Buchhalter sagt: "Wir haben schon Informationsquellen, die funktionieren." Wie reagieren Sie?',
             options: [
-              { id: 1, text: '„Unser System ist besser."', correct: false, feedback: 'Zu defensiv. Kritisiert den Kunden indirekt.' },
-              { id: 2, text: '„Das verstehe ich. Was funktioniert gut, was könnte besser sein?"', correct: true, feedback: 'Sehr gut! Zeigt Respekt und öffnet das Gespräch.' },
+              { id: 1, text: '„Unser Fachinfodienst ist besser."', correct: false, feedback: 'Zu defensiv. Kritisiert den Kunden indirekt.' },
+              { id: 2, text: '„Das verstehe ich. Welche Informationsquellen nutzen Sie? Was funktioniert gut, was könnte aktueller sein?"', correct: true, feedback: 'Sehr gut! Zeigt Respekt und öffnet das Gespräch.' },
               { id: 3, text: '„Dann brauchen Sie uns wohl nicht."', correct: false, feedback: 'Zu schnell aufgegeben. Jeder Einwand ist eine Chance.' }
             ]
           }
@@ -365,9 +365,9 @@ const scenarios = [
             description: 'Aktuelle Situation verstehen',
             question: 'Welche Frage hilft Ihnen, die aktuelle Situation zu verstehen?',
             options: [
-              { id: 1, text: '„Wie viele Belege verarbeiten Sie pro Monat?"', correct: true, feedback: 'Gut! Konkrete Situationsfrage mit Zahlen.' },
-              { id: 2, text: '„Möchten Sie unser System kaufen?"', correct: false, feedback: 'Zu früh für Abschlussfrage. Erst Situation klären.' },
-              { id: 3, text: '„Ist Ihr aktuelles System teuer?"', correct: false, feedback: 'Geschlossene Frage. Besser offen fragen.' }
+              { id: 1, text: '„Wie informieren Sie sich aktuell über neue GoBD-Anforderungen und Buchhaltungsthemen?"', correct: true, feedback: 'Gut! Konkrete Situationsfrage zur Informationsbeschaffung.' },
+              { id: 2, text: '„Möchten Sie unseren Fachinfodienst abonnieren?"', correct: false, feedback: 'Zu früh für Abschlussfrage. Erst Situation klären.' },
+              { id: 3, text: '„Sind Ihre aktuellen Informationsquellen teuer?"', correct: false, feedback: 'Geschlossene Frage. Besser offen fragen.' }
             ]
           },
           {
@@ -375,11 +375,11 @@ const scenarios = [
             type: 'question',
             title: 'SPIN-Fragen: Problem',
             description: 'Herausforderungen identifizieren',
-            question: 'Der Buchhalter erwähnt, dass die Belegsuche lange dauert. Wie vertiefen Sie das Problem?',
+            question: 'Der Buchhalter erwähnt, dass er manchmal zu spät von neuen GoBD-Anforderungen erfährt. Wie vertiefen Sie das Problem?',
             options: [
               { id: 1, text: '„Das ist nicht so schlimm."', correct: false, feedback: 'Ignoriert das Problem. Verpasste Chance.' },
-              { id: 2, text: '„Wie lange dauert die Suche im Schnitt? Was bedeutet das für Ihren Arbeitsalltag?"', correct: true, feedback: 'Perfekt! Problemfrage mit Implikation.' },
-              { id: 3, text: '„Unser System ist schneller."', correct: false, feedback: 'Zu früh zur Lösung. Erst Problem verstehen.' }
+              { id: 2, text: '„Was bedeutet das konkret? Welche Folgen hatte das schon? Wie wichtig ist es, immer aktuell informiert zu sein?"', correct: true, feedback: 'Perfekt! Problemfrage mit Implikation.' },
+              { id: 3, text: '„Unser Fachinfodienst informiert Sie sofort."', correct: false, feedback: 'Zu früh zur Lösung. Erst Problem verstehen.' }
             ]
           },
           {
@@ -387,11 +387,11 @@ const scenarios = [
             type: 'objection',
             title: 'Preis-Einwand',
             description: 'Budget-Bedenken behandeln',
-            question: 'Der Geschäftsführer sagt: "15.000€ pro Jahr ist zu teuer für uns." Wie reagieren Sie?',
+            question: 'Der Geschäftsführer sagt: "Das Abonnement ist zu teuer für uns." Wie reagieren Sie?',
             options: [
               { id: 1, text: '„Dann können wir leider nicht zusammenarbeiten."', correct: false, feedback: 'Zu schnell aufgegeben. Preis-Einwand ist oft versteckter Einwand.' },
               { id: 2, text: '„Ich kann Ihnen 20% Rabatt geben."', correct: false, feedback: 'Zu schnell nachgegeben. Wert nicht kommuniziert.' },
-              { id: 3, text: '„Teuer im Vergleich zu was? Was kostet Sie die aktuelle manuelle Suche an Zeit?"', correct: true, feedback: 'Sehr gut! Wert-Kommunikation statt Preisdiskussion.' }
+              { id: 3, text: '„Das verstehe ich. Sie können unseren Fachinfodienst 4 Wochen kostenlos testen. Danach können Sie entscheiden, ob Sie die Zeitschrift behalten möchten. Was kostet Sie fehlende oder veraltete Informationen?"', correct: true, feedback: 'Sehr gut! Kostenloser Testzeitraum anbieten, Wert-Kommunikation statt Preisdiskussion.' }
             ]
           }
         ]
@@ -406,10 +406,10 @@ const scenarios = [
             type: 'question',
             title: 'Wert-Kommunikation',
             description: 'Mehrwert statt Features präsentieren',
-            question: 'Wie präsentieren Sie die GoBD-Konformität wertorientiert?',
+            question: 'Wie präsentieren Sie den Fachinfodienst wertorientiert?',
             options: [
-              { id: 1, text: '„Unsere Lösung ist GoBD-konform."', correct: false, feedback: 'Zu technisch. Kunde versteht den Wert nicht.' },
-              { id: 2, text: '„Mit unserer Lösung erfüllen Sie alle GoBD-Anforderungen automatisch. Das bedeutet: Keine Risiken bei Steuerprüfungen, keine Nacharbeit, mehr Sicherheit."', correct: true, feedback: 'Perfekt! Wert und Nutzen klar kommuniziert.' },
+              { id: 1, text: '„Unser Fachinfodienst informiert über GoBD."', correct: false, feedback: 'Zu technisch. Kunde versteht den Wert nicht.' },
+              { id: 2, text: '„Unser Fachinfodienst hält Sie immer aktuell über GoBD-Anforderungen und Buchhaltungsthemen. Das bedeutet: Sie sind immer informiert, vermeiden Fehler bei Steuerprüfungen, sparen Recherchezeit. Sie können 4 Wochen kostenlos testen, danach können Sie die Zeitschrift behalten."', correct: true, feedback: 'Perfekt! Wert und Nutzen klar kommuniziert, kostenloser Testzeitraum erwähnt.' },
               { id: 3, text: '„GoBD ist wichtig."', correct: false, feedback: 'Zu vage. Kein konkreter Nutzen.' }
             ]
           },
@@ -418,10 +418,10 @@ const scenarios = [
             type: 'objection',
             title: 'Datenschutz-Bedenken',
             description: 'Vertrauen bei Datenschutz aufbauen',
-            question: 'Der Buchhalter fragt: "Wo werden unsere Daten gespeichert? Ist das DSGVO-konform?"',
+            question: 'Der Buchhalter fragt: "Wie aktuell sind die Informationen? Werden die Inhalte regelmäßig aktualisiert?"',
             options: [
               { id: 1, text: '„Das ist kompliziert zu erklären."', correct: false, feedback: 'Wirkt unsicher. Kunde verliert Vertrauen.' },
-              { id: 2, text: '„Unsere Server stehen in Deutschland, wir haben ein AVV und sind DSGVO-zertifiziert. Darf ich Ihnen unsere Zertifikate zeigen?"', correct: true, feedback: 'Sehr gut! Konkret, transparent, vertrauensbildend.' },
+              { id: 2, text: '„Unser Fachinfodienst wird monatlich aktualisiert mit den neuesten GoBD-Anforderungen und Buchhaltungsthemen. Alle Informationen sind geprüft und aktuell. Sie können 4 Wochen kostenlos testen, um sich selbst zu überzeugen."', correct: true, feedback: 'Sehr gut! Konkret, transparent, vertrauensbildend, kostenloser Testzeitraum erwähnt.' },
               { id: 3, text: '„Das ist kein Problem."', correct: false, feedback: 'Zu oberflächlich. Kunde braucht Details.' }
             ]
           }
@@ -439,8 +439,8 @@ const scenarios = [
             description: 'Natürlich zum Abschluss führen',
             question: 'Der Geschäftsführer zeigt Interesse. Wie führen Sie zum Abschluss?',
             options: [
-              { id: 1, text: '„Wollen Sie jetzt kaufen?"', correct: false, feedback: 'Zu direkt. Wirkt aufdringlich.' },
-              { id: 2, text: '„Wie klingt das für Sie – sollen wir den Vertrag für den 1. Februar starten?"', correct: true, feedback: 'Perfekt! Alternativfrage mit konkretem Starttermin.' },
+              { id: 1, text: '„Wollen Sie jetzt abonnieren?"', correct: false, feedback: 'Zu direkt. Wirkt aufdringlich.' },
+              { id: 2, text: '„Wie klingt das für Sie – sollen wir mit dem kostenlosen 4-Wochen-Test starten? Danach können Sie entscheiden, ob Sie die Zeitschrift behalten möchten."', correct: true, feedback: 'Perfekt! Alternativfrage mit kostenlosem Testzeitraum, danach Option die Zeitschrift zu behalten.' },
               { id: 3, text: '„Sie können sich ja noch überlegen."', correct: false, feedback: 'Zu passiv. Verpasste Chance.' }
             ]
           }
@@ -459,12 +459,12 @@ const scenarios = [
     goal: 'System erfolgreich einführen und Akzeptanz schaffen',
     timeLimit: 18,
     stakeholders: ['Pflegedienstleitung', 'Pflegekräfte', 'Geschäftsführung'],
-    objections: ['Zu kompliziert', 'Mehraufwand im Alltag', 'Technik-Probleme', 'Schulungsaufwand'],
+    objections: ['Nutzen unklar', 'Zu teuer', 'Aktualität der Informationen', 'Brauchen wir nicht'],
     questions: [
-      'Wie planen Sie aktuell Ihre Dienste?',
-      'Welche Dokumentation ist wichtig?',
-      'Wie digital sind Sie bereits?',
-      'Wer entscheidet über neue Systeme?'
+      'Wie informieren Sie sich aktuell über neue Anforderungen in der Pflege?',
+      'Welche Informationsquellen nutzen Sie für Dokumentation und rechtliche Themen?',
+      'Wie wichtig ist es, immer aktuell informiert zu sein?',
+      'Wer entscheidet über Fachinfodienste?'
     ],
     phases: [
       {
@@ -496,10 +496,10 @@ const scenarios = [
             type: 'question',
             title: 'Problem-Identifikation',
             description: 'Herausforderungen bei der Dokumentation finden',
-            question: 'Die Pflegedienstleitung erwähnt, dass die Dokumentation viel Zeit kostet. Wie vertiefen Sie das?',
+            question: 'Die Pflegedienstleitung erwähnt, dass sie manchmal zu spät von neuen Anforderungen erfährt. Wie vertiefen Sie das?',
             options: [
-              { id: 1, text: '„Unser System ist schneller."', correct: false, feedback: 'Zu früh zur Lösung. Erst Problem verstehen.' },
-              { id: 2, text: '„Wie viel Zeit investieren Sie aktuell? Was bedeutet das für die Zeit mit den Bewohnern?"', correct: true, feedback: 'Sehr gut! Problem mit Implikation vertieft.' },
+              { id: 1, text: '„Unser Fachinfodienst informiert Sie sofort."', correct: false, feedback: 'Zu früh zur Lösung. Erst Problem verstehen.' },
+              { id: 2, text: '„Was bedeutet das konkret? Welche Folgen hatte das schon? Wie wichtig ist es, immer aktuell informiert zu sein?"', correct: true, feedback: 'Sehr gut! Problem mit Implikation vertieft.' },
               { id: 3, text: '„Das ist normal."', correct: false, feedback: 'Ignoriert das Problem.' }
             ]
           },
@@ -508,11 +508,11 @@ const scenarios = [
             type: 'objection',
             title: 'Mehraufwand-Einwand',
             description: 'Bedenken der Pflegekräfte adressieren',
-            question: 'Eine Pflegekraft sagt: "Das wird nur noch mehr Arbeit für uns." Wie reagieren Sie?',
+            question: 'Eine Pflegekraft sagt: "Wir haben schon genug zu lesen." Wie reagieren Sie?',
             options: [
               { id: 1, text: '„Das stimmt nicht."', correct: false, feedback: 'Zu defensiv. Ignoriert die Bedenken.' },
-              { id: 2, text: '„Ich verstehe Ihre Sorge. Lassen Sie mich zeigen, wie andere Einrichtungen Zeit sparen. Was würde Ihnen am meisten helfen?"', correct: true, feedback: 'Perfekt! Empathie, Social Proof, offene Frage.' },
-              { id: 3, text: '„Sie müssen es einfach nutzen."', correct: false, feedback: 'Zu autoritär. Schafft Widerstand.' }
+              { id: 2, text: '„Das verstehe ich. Unser Fachinfodienst ist kompakt und fokussiert auf das Wesentliche. Sie können 4 Wochen kostenlos testen, um zu sehen, ob er Ihnen hilft. Was würde Ihnen am meisten helfen?"', correct: true, feedback: 'Perfekt! Empathie, kostenloser Testzeitraum, offene Frage.' },
+              { id: 3, text: '„Sie müssen es einfach lesen."', correct: false, feedback: 'Zu autoritär. Schafft Widerstand.' }
             ]
           }
         ]
@@ -527,11 +527,11 @@ const scenarios = [
             type: 'question',
             title: 'Wert für Pflegekräfte',
             description: 'Mehrwert für den Alltag kommunizieren',
-            question: 'Wie präsentieren Sie die mobile Dokumentation wertorientiert?',
+            question: 'Wie präsentieren Sie den Fachinfodienst wertorientiert?',
             options: [
-              { id: 1, text: '„Sie können am Tablet dokumentieren."', correct: false, feedback: 'Zu technisch. Fehlt der Nutzen.' },
-              { id: 2, text: '„Sie dokumentieren direkt am Bett, sparen Wege und haben mehr Zeit für die Bewohner."', correct: true, feedback: 'Perfekt! Konkreter Nutzen für den Alltag.' },
-              { id: 3, text: '„Es ist modern."', correct: false, feedback: 'Zu vage. Kein konkreter Wert.' }
+              { id: 1, text: '„Unser Fachinfodienst informiert über Pflegethemen."', correct: false, feedback: 'Zu technisch. Fehlt der Nutzen.' },
+              { id: 2, text: '„Unser Fachinfodienst hält Sie immer aktuell über neue Anforderungen, rechtliche Themen und Best Practices. Das bedeutet: Sie sind immer informiert, vermeiden Fehler, sparen Recherchezeit. Sie können 4 Wochen kostenlos testen, danach können Sie die Zeitschrift behalten."', correct: true, feedback: 'Perfekt! Konkreter Nutzen, kostenloser Testzeitraum erwähnt.' },
+              { id: 3, text: '„Es ist informativ."', correct: false, feedback: 'Zu vage. Kein konkreter Wert.' }
             ]
           }
         ]
@@ -548,8 +548,8 @@ const scenarios = [
             description: 'Risiko reduzieren durch Pilot',
             question: 'Die Pflegedienstleitung ist interessiert, aber unsicher. Wie schlagen Sie vor?',
             options: [
-              { id: 1, text: '„Sie müssen das ganze System kaufen."', correct: false, feedback: 'Zu risikoreich für den Kunden.' },
-              { id: 2, text: '„Wie wäre es mit einem 3-Monats-Pilot in einer Station? So können Sie es risikofrei testen."', correct: true, feedback: 'Sehr gut! Risiko reduziert, natürlicher Abschluss.' },
+              { id: 1, text: '„Sie müssen das Abonnement direkt abschließen."', correct: false, feedback: 'Zu risikoreich für den Kunden.' },
+              { id: 2, text: '„Wie wäre es mit einem kostenlosen 4-Wochen-Test? So können Sie risikofrei prüfen, ob der Fachinfodienst Ihnen hilft. Danach können Sie entscheiden, ob Sie die Zeitschrift behalten möchten."', correct: true, feedback: 'Sehr gut! Kostenloser Testzeitraum, Risiko reduziert, natürlicher Abschluss.' },
               { id: 3, text: '„Sie können es ja mal probieren."', correct: false, feedback: 'Zu vage. Keine klare Handlung.' }
             ]
           }
@@ -559,21 +559,21 @@ const scenarios = [
   },
   { 
     id: 'kita', 
-    title: 'Kita - Elternkommunikations- und Abrechnungs-App', 
+    title: 'Kita - Fachinfodienst für Kindertagesstätten', 
     industry: 'education', 
     difficulty: 'intermediate',
-    description: 'Kita-App mit Datenschutz verkaufen',
-    situation: 'Eine Kita prüft eine Elternkommunikations- und Abrechnungs-App',
-    challenge: 'Leitung sorgt sich um Datenschutz und Bedienbarkeit',
-    goal: 'App erfolgreich einführen und Eltern begeistern',
+    description: 'Fachinfodienst für Kitas mit kostenlosem Testzeitraum verkaufen',
+    situation: 'Eine Kita prüft einen Fachinfodienst zu aktuellen Themen wie Pädagogik, rechtliche Anforderungen und Elternarbeit',
+    challenge: 'Leitung sorgt sich um Nutzen und Aktualität der Informationen',
+    goal: 'Abonnement für Fachinfodienst abschließen - kostenloser Testzeitraum, danach kann die Zeitschrift behalten werden',
     timeLimit: 15,
     stakeholders: ['Kitaleitung', 'Erzieherinnen', 'Elternbeirat'],
-    objections: ['Datenschutz-Bedenken', 'Zu teuer', 'Zu kompliziert', 'Eltern-Akzeptanz unklar'],
+    objections: ['Nutzen unklar', 'Zu teuer', 'Aktualität der Informationen', 'Brauchen wir nicht'],
     questions: [
-      'Wie kommunizieren Sie aktuell mit Eltern?',
-      'Welche Datenschutz-Anforderungen haben Sie?',
-      'Wie digital sind Ihre Eltern?',
-      'Wer entscheidet über neue Tools?'
+      'Wie informieren Sie sich aktuell über neue pädagogische Ansätze und rechtliche Anforderungen?',
+      'Welche Informationsquellen nutzen Sie für Ihre Arbeit?',
+      'Wie wichtig ist es, immer aktuell informiert zu sein?',
+      'Wer entscheidet über Fachinfodienste?'
     ],
     phases: [
       {
@@ -588,9 +588,9 @@ const scenarios = [
             description: 'Respekt für die Arbeit in der Kita zeigen',
             question: 'Sie treffen die Kitaleitung. Wie eröffnen Sie das Gespräch?',
             options: [
-              { id: 1, text: '„Ich habe eine App, die Sie brauchen."', correct: false, feedback: 'Zu direkt. Fehlt Empathie und Respekt.' },
-              { id: 2, text: '„Guten Tag, vielen Dank für Ihre Zeit. Wie kommunizieren Sie aktuell mit den Eltern?"', correct: true, feedback: 'Perfekt! Zeigt Respekt und Interesse an der aktuellen Situation.' },
-              { id: 3, text: '„Ich verkaufe Apps für Kitas."', correct: false, feedback: 'Zu verkaufsorientiert. Kunde fühlt sich unter Druck gesetzt.' }
+              { id: 1, text: '„Ich habe einen Fachinfodienst, den Sie brauchen."', correct: false, feedback: 'Zu direkt. Fehlt Empathie und Respekt.' },
+              { id: 2, text: '„Guten Tag, vielen Dank für Ihre Zeit. Wie informieren Sie sich aktuell über neue pädagogische Ansätze und rechtliche Anforderungen?"', correct: true, feedback: 'Perfekt! Zeigt Respekt und Interesse an der aktuellen Situation.' },
+              { id: 3, text: '„Ich verkaufe Fachinfodienste für Kitas."', correct: false, feedback: 'Zu verkaufsorientiert. Kunde fühlt sich unter Druck gesetzt.' }
             ]
           }
         ]
@@ -617,10 +617,10 @@ const scenarios = [
             type: 'objection',
             title: 'Datenschutz-Bedenken',
             description: 'DSGVO-Konformität transparent kommunizieren',
-            question: 'Die Kitaleitung fragt: "Wie ist das mit dem Datenschutz? Wir haben Kinderdaten." Wie reagieren Sie?',
+            question: 'Die Kitaleitung fragt: "Wie aktuell sind die Informationen? Werden die Inhalte regelmäßig aktualisiert?" Wie reagieren Sie?',
             options: [
               { id: 1, text: '„Das ist kein Problem."', correct: false, feedback: 'Zu oberflächlich. Kunde braucht Details.' },
-              { id: 2, text: '„Sehr gute Frage! Unsere App ist DSGVO-konform, speichert in Deutschland und wir haben ein AVV. Darf ich Ihnen unsere Datenschutzerklärung zeigen?"', correct: true, feedback: 'Perfekt! Konkret, transparent, vertrauensbildend.' },
+              { id: 2, text: '„Sehr gute Frage! Unser Fachinfodienst wird monatlich aktualisiert mit den neuesten pädagogischen Ansätzen und rechtlichen Anforderungen. Alle Informationen sind geprüft und aktuell. Sie können 4 Wochen kostenlos testen, um sich selbst zu überzeugen."', correct: true, feedback: 'Perfekt! Konkret, transparent, vertrauensbildend, kostenloser Testzeitraum erwähnt.' },
               { id: 3, text: '„Das ist kompliziert zu erklären."', correct: false, feedback: 'Wirkt unsicher. Kunde verliert Vertrauen.' }
             ]
           },
@@ -629,10 +629,10 @@ const scenarios = [
             type: 'question',
             title: 'Problem-Identifikation',
             description: 'Herausforderungen bei der Kommunikation finden',
-            question: 'Die Kitaleitung erwähnt, dass wichtige Infos manchmal untergehen. Wie vertiefen Sie das Problem?',
+            question: 'Die Kitaleitung erwähnt, dass sie manchmal wichtige Informationen verpasst. Wie vertiefen Sie das Problem?',
             options: [
-              { id: 1, text: '„Unsere App löst das."', correct: false, feedback: 'Zu früh zur Lösung. Erst Problem verstehen.' },
-              { id: 2, text: '„Was bedeutet das konkret? Welche Folgen hat das für Sie und die Eltern?"', correct: true, feedback: 'Sehr gut! Problemfrage mit Implikation.' },
+              { id: 1, text: '„Unser Fachinfodienst löst das."', correct: false, feedback: 'Zu früh zur Lösung. Erst Problem verstehen.' },
+              { id: 2, text: '„Was bedeutet das konkret? Welche Folgen hat das für Sie und Ihre Arbeit?"', correct: true, feedback: 'Sehr gut! Problemfrage mit Implikation.' },
               { id: 3, text: '„Das ist normal."', correct: false, feedback: 'Ignoriert das Problem. Verpasste Chance.' }
             ]
           }
@@ -648,11 +648,11 @@ const scenarios = [
             type: 'question',
             title: 'Wert-Kommunikation',
             description: 'Mehrwert statt Features präsentieren',
-            question: 'Wie präsentieren Sie die Push-Benachrichtigungen wertorientiert?',
+            question: 'Wie präsentieren Sie den Fachinfodienst wertorientiert?',
             options: [
-              { id: 1, text: '„Die App hat Push-Benachrichtigungen."', correct: false, feedback: 'Zu technisch. Kunde versteht den Wert nicht.' },
-              { id: 2, text: '„Eltern erhalten wichtige Infos sofort aufs Handy. Das bedeutet: Keine verpassten Termine, weniger Rückfragen, mehr Zeit für die Kinder."', correct: true, feedback: 'Perfekt! Wert und Nutzen klar kommuniziert.' },
-              { id: 3, text: '„Es ist modern."', correct: false, feedback: 'Zu vage. Kein konkreter Nutzen.' }
+              { id: 1, text: '„Unser Fachinfodienst informiert über Kit-Themen."', correct: false, feedback: 'Zu technisch. Kunde versteht den Wert nicht.' },
+              { id: 2, text: '„Unser Fachinfodienst hält Sie immer aktuell über neue pädagogische Ansätze, rechtliche Anforderungen und Best Practices. Das bedeutet: Sie sind immer informiert, vermeiden Fehler, sparen Recherchezeit. Sie können 4 Wochen kostenlos testen, danach können Sie die Zeitschrift behalten."', correct: true, feedback: 'Perfekt! Wert und Nutzen klar kommuniziert, kostenloser Testzeitraum erwähnt.' },
+              { id: 3, text: '„Es ist informativ."', correct: false, feedback: 'Zu vage. Kein konkreter Nutzen.' }
             ]
           },
           {
@@ -660,11 +660,11 @@ const scenarios = [
             type: 'objection',
             title: 'Bedienbarkeit-Einwand',
             description: 'Einfachheit und Schulung kommunizieren',
-            question: 'Eine Erzieherin sagt: "Das ist zu kompliziert für uns." Wie reagieren Sie?',
+            question: 'Eine Erzieherin sagt: "Wir haben schon genug zu lesen." Wie reagieren Sie?',
             options: [
               { id: 1, text: '„Das stimmt nicht, es ist einfach."', correct: false, feedback: 'Zu defensiv. Ignoriert die Bedenken.' },
-              { id: 2, text: '„Ich verstehe Ihre Sorge. Wir bieten eine kostenlose Schulung und Support. Viele Kitas sagen, dass es nach 2 Tagen selbstverständlich ist. Darf ich Ihnen zeigen, wie einfach es ist?"', correct: true, feedback: 'Sehr gut! Empathie, Social Proof, konkrete Unterstützung.' },
-              { id: 3, text: '„Sie müssen es einfach nutzen."', correct: false, feedback: 'Zu autoritär. Schafft Widerstand.' }
+              { id: 2, text: '„Das verstehe ich. Unser Fachinfodienst ist kompakt und fokussiert auf das Wesentliche. Sie können 4 Wochen kostenlos testen, um zu sehen, ob er Ihnen hilft. Viele Kitas sagen, dass er ihnen Zeit spart."', correct: true, feedback: 'Sehr gut! Empathie, kostenloser Testzeitraum, Social Proof.' },
+              { id: 3, text: '„Sie müssen es einfach lesen."', correct: false, feedback: 'Zu autoritär. Schafft Widerstand.' }
             ]
           },
           {
@@ -672,10 +672,10 @@ const scenarios = [
             type: 'objection',
             title: 'Preis-Einwand',
             description: 'Wert statt Preis kommunizieren',
-            question: 'Die Kitaleitung sagt: "Das ist zu teuer für uns." Wie reagieren Sie?',
+            question: 'Die Kitaleitung sagt: "Das Abonnement ist zu teuer für uns." Wie reagieren Sie?',
             options: [
               { id: 1, text: '„Dann können wir leider nicht zusammenarbeiten."', correct: false, feedback: 'Zu schnell aufgegeben. Preis-Einwand ist oft versteckter Einwand.' },
-              { id: 2, text: '„Teuer im Vergleich zu was? Was kostet Sie die aktuelle Kommunikation an Zeit und verpassten Infos?"', correct: true, feedback: 'Sehr gut! Wert-Kommunikation statt Preisdiskussion.' },
+              { id: 2, text: '„Das verstehe ich. Sie können unseren Fachinfodienst 4 Wochen kostenlos testen. Danach können Sie entscheiden, ob Sie die Zeitschrift behalten möchten. Was kostet Sie fehlende oder veraltete Informationen?"', correct: true, feedback: 'Sehr gut! Kostenloser Testzeitraum anbieten, Wert-Kommunikation statt Preisdiskussion.' },
               { id: 3, text: '„Ich kann Ihnen 20% Rabatt geben."', correct: false, feedback: 'Zu schnell nachgegeben. Wert nicht kommuniziert.' }
             ]
           }
@@ -691,10 +691,10 @@ const scenarios = [
             type: 'question',
             title: 'Pilotprojekt vorschlagen',
             description: 'Risiko reduzieren durch Testphase',
-            question: 'Die Kitaleitung ist interessiert, aber unsicher wegen der Eltern-Akzeptanz. Wie schlagen Sie vor?',
+            question: 'Die Kitaleitung ist interessiert, aber unsicher. Wie schlagen Sie vor?',
             options: [
-              { id: 1, text: '„Sie müssen die App für alle Eltern kaufen."', correct: false, feedback: 'Zu risikoreich für den Kunden.' },
-              { id: 2, text: '„Wie wäre es mit einem 2-Monats-Pilot mit einer Gruppe? So können Sie und die Eltern es risikofrei testen."', correct: true, feedback: 'Sehr gut! Risiko reduziert, natürlicher Abschluss.' },
+              { id: 1, text: '„Sie müssen das Abonnement direkt abschließen."', correct: false, feedback: 'Zu risikoreich für den Kunden.' },
+              { id: 2, text: '„Wie wäre es mit einem kostenlosen 4-Wochen-Test? So können Sie risikofrei prüfen, ob der Fachinfodienst Ihnen hilft. Danach können Sie entscheiden, ob Sie die Zeitschrift behalten möchten."', correct: true, feedback: 'Sehr gut! Kostenloser Testzeitraum, Risiko reduziert, natürlicher Abschluss.' },
               { id: 3, text: '„Sie können es ja mal probieren."', correct: false, feedback: 'Zu vage. Keine klare Handlung.' }
             ]
           }
@@ -704,21 +704,21 @@ const scenarios = [
   },
   { 
     id: 'export', 
-    title: 'Export - Ursprung, Präferenzen und Sanktionslisten', 
+    title: 'Export - Fachinfodienst für Export-Compliance', 
     industry: 'logistics', 
     difficulty: 'advanced',
-    description: 'Export-Compliance-Lösung verkaufen',
-    situation: 'Sie verkaufen eine Export-Compliance-Software an ein Handelsunternehmen',
+    description: 'Fachinfodienst für Export-Compliance mit kostenlosem Testzeitraum verkaufen',
+    situation: 'Sie verkaufen einen Fachinfodienst für Export-Compliance zu Themen wie Ursprung, Präferenzen und Sanktionslisten an ein Handelsunternehmen',
     challenge: 'Komplexe Zoll- und Sanktionsregelungen verstehen und kommunizieren',
-    goal: 'Software-Lizenz für 50.000€/Jahr verkaufen',
+    goal: 'Abonnement für Fachinfodienst abschließen - kostenloser Testzeitraum, danach kann die Zeitschrift behalten werden',
     timeLimit: 25,
     stakeholders: ['Export-Leiter', 'Compliance-Officer', 'Geschäftsführung'],
-    objections: ['Zu komplex', 'Hohe Kosten', 'Unklarer ROI', 'Implementierungsaufwand'],
+    objections: ['Nutzen unklar', 'Zu teuer', 'Aktualität der Informationen', 'Brauchen wir nicht'],
     questions: [
-      'Welche Länder exportieren Sie?',
-      'Wie handhaben Sie aktuell Compliance?',
-      'Welche Sanktionslisten sind relevant?',
-      'Wer ist für Export-Entscheidungen zuständig?'
+      'Wie informieren Sie sich aktuell über Export-Compliance und Sanktionslisten?',
+      'Welche Informationsquellen nutzen Sie für Compliance-Themen?',
+      'Wie wichtig ist es, immer aktuell informiert zu sein?',
+      'Wer entscheidet über Fachinfodienste?'
     ],
     phases: [
       {
@@ -750,11 +750,11 @@ const scenarios = [
             type: 'question',
             title: 'Situation verstehen',
             description: 'Aktuelle Compliance-Prozesse analysieren',
-            question: 'Der Export-Leiter erwähnt, dass sie manuell Sanktionslisten prüfen. Wie vertiefen Sie das?',
+            question: 'Der Export-Leiter erwähnt, dass sie manchmal zu spät von neuen Sanktionslisten erfahren. Wie vertiefen Sie das?',
             options: [
-              { id: 1, text: '„Das ist ineffizient. Sie brauchen unsere Software."', correct: false, feedback: 'Zu kritisch. Ignoriert die aktuelle Situation.' },
-              { id: 2, text: '„Wie läuft das im Detail ab? Wie viele Exporte prüfen Sie pro Woche? Wie lange dauert eine Prüfung?"', correct: true, feedback: 'Sehr gut! Konkrete Situationsfragen mit Zahlen.' },
-              { id: 3, text: '„Unsere Software ist schneller."', correct: false, feedback: 'Zu früh zur Lösung. Erst Situation verstehen.' }
+              { id: 1, text: '„Das ist ineffizient. Sie brauchen unseren Fachinfodienst."', correct: false, feedback: 'Zu kritisch. Ignoriert die aktuelle Situation.' },
+              { id: 2, text: '„Was bedeutet das konkret? Welche Folgen hatte das schon? Wie wichtig ist es, immer aktuell informiert zu sein?"', correct: true, feedback: 'Sehr gut! Konkrete Situationsfragen mit Implikation.' },
+              { id: 3, text: '„Unser Fachinfodienst informiert Sie sofort."', correct: false, feedback: 'Zu früh zur Lösung. Erst Situation verstehen.' }
             ]
           },
           {
@@ -762,11 +762,11 @@ const scenarios = [
             type: 'question',
             title: 'Problem-Identifikation',
             description: 'Risiken und Herausforderungen identifizieren',
-            question: 'Der Compliance-Officer erwähnt, dass manuelle Prüfungen fehleranfällig sind. Wie vertiefen Sie das Problem?',
+            question: 'Der Compliance-Officer erwähnt, dass veraltete Informationen zu Fehlern führen können. Wie vertiefen Sie das Problem?',
             options: [
               { id: 1, text: '„Das ist gefährlich."', correct: false, feedback: 'Zu alarmierend. Wirkt übertrieben.' },
               { id: 2, text: '„Was bedeutet das konkret? Welche Risiken bestehen? Was wäre der Worst Case bei einem Fehler?"', correct: true, feedback: 'Perfekt! Problemfrage mit Implikation und Risikobewertung.' },
-              { id: 3, text: '„Unsere Software verhindert Fehler."', correct: false, feedback: 'Zu früh zur Lösung. Erst Problem verstehen.' }
+              { id: 3, text: '„Unser Fachinfodienst verhindert Fehler."', correct: false, feedback: 'Zu früh zur Lösung. Erst Problem verstehen.' }
             ]
           },
           {
@@ -774,10 +774,10 @@ const scenarios = [
             type: 'objection',
             title: 'Komplexitäts-Einwand',
             description: 'Komplexität als Stärke positionieren',
-            question: 'Der Export-Leiter sagt: "Das System klingt zu komplex für uns." Wie reagieren Sie?',
+            question: 'Der Export-Leiter sagt: "Das klingt zu komplex für uns." Wie reagieren Sie?',
             options: [
               { id: 1, text: '„Das stimmt nicht, es ist einfach."', correct: false, feedback: 'Zu defensiv. Ignoriert die Bedenken.' },
-              { id: 2, text: '„Ich verstehe Ihre Sorge. Export-Compliance ist komplex – genau deshalb automatisieren wir das. Sie müssen sich nicht mit den Details beschäftigen, das System macht es für Sie."', correct: true, feedback: 'Sehr gut! Anerkennt Komplexität, zeigt wie die Lösung sie reduziert.' },
+              { id: 2, text: '„Das verstehe ich. Export-Compliance ist komplex – genau deshalb bieten wir einen kompakten Fachinfodienst, der die wichtigsten Informationen aufbereitet. Sie können 4 Wochen kostenlos testen, um zu sehen, ob er Ihnen hilft."', correct: true, feedback: 'Sehr gut! Anerkennt Komplexität, zeigt wie die Lösung hilft, kostenloser Testzeitraum erwähnt.' },
               { id: 3, text: '„Sie müssen es einfach nutzen."', correct: false, feedback: 'Zu autoritär. Schafft Widerstand.' }
             ]
           }
@@ -793,11 +793,11 @@ const scenarios = [
             type: 'question',
             title: 'Wert-Kommunikation',
             description: 'Mehrwert statt Features präsentieren',
-            question: 'Wie präsentieren Sie die automatische Sanktionsprüfung wertorientiert?',
+            question: 'Wie präsentieren Sie den Fachinfodienst wertorientiert?',
             options: [
-              { id: 1, text: '„Die Software prüft automatisch Sanktionslisten."', correct: false, feedback: 'Zu technisch. Kunde versteht den Wert nicht.' },
-              { id: 2, text: '„Jeder Export wird automatisch gegen aktuelle Sanktionslisten geprüft. Das bedeutet: Keine Compliance-Risiken, keine Bußgelder, keine Reputationsschäden. Sie sparen Zeit und schlafen ruhiger."', correct: true, feedback: 'Perfekt! Wert, Risikominimierung und Nutzen klar kommuniziert.' },
-              { id: 3, text: '„Es ist sicher."', correct: false, feedback: 'Zu vage. Kein konkreter Nutzen.' }
+              { id: 1, text: '„Unser Fachinfodienst informiert über Sanktionslisten."', correct: false, feedback: 'Zu technisch. Kunde versteht den Wert nicht.' },
+              { id: 2, text: '„Unser Fachinfodienst hält Sie immer aktuell über neue Sanktionslisten und Export-Compliance-Themen. Das bedeutet: Keine Compliance-Risiken, keine Bußgelder, keine Reputationsschäden. Sie sparen Recherchezeit. Sie können 4 Wochen kostenlos testen, danach können Sie die Zeitschrift behalten."', correct: true, feedback: 'Perfekt! Wert, Risikominimierung und Nutzen klar kommuniziert, kostenloser Testzeitraum erwähnt.' },
+              { id: 3, text: '„Es ist informativ."', correct: false, feedback: 'Zu vage. Kein konkreter Nutzen.' }
             ]
           },
           {
@@ -805,10 +805,10 @@ const scenarios = [
             type: 'objection',
             title: 'ROI-Einwand',
             description: 'ROI konkret berechnen und kommunizieren',
-            question: 'Die Geschäftsführung fragt: "Wie rechtfertigen wir 50.000€ pro Jahr?" Wie reagieren Sie?',
+            question: 'Die Geschäftsführung fragt: "Das Abonnement ist zu teuer." Wie reagieren Sie?',
             options: [
               { id: 1, text: '„Das ist der Preis."', correct: false, feedback: 'Zu passiv. Kein Wert kommuniziert.' },
-              { id: 2, text: '„Lassen Sie uns das durchrechnen: Wie viel kostet Sie eine manuelle Prüfung? Was wäre ein Compliance-Verstoß wert? Bei 1000 Exporten pro Jahr und 10 Minuten pro Prüfung sparen Sie [X] Stunden. Ein Verstoß kann [Y]€ kosten. Die Software amortisiert sich schnell."', correct: true, feedback: 'Sehr gut! Konkrete ROI-Berechnung mit Zahlen.' },
+              { id: 2, text: '„Das verstehe ich. Sie können unseren Fachinfodienst 4 Wochen kostenlos testen. Danach können Sie entscheiden, ob Sie die Zeitschrift behalten möchten. Was kostet Sie fehlende oder veraltete Compliance-Informationen? Ein Verstoß kann [Y]€ kosten."', correct: true, feedback: 'Sehr gut! Kostenloser Testzeitraum anbieten, Wert-Kommunikation mit Risikobewertung.' },
               { id: 3, text: '„Es ist eine Investition."', correct: false, feedback: 'Zu vage. Keine konkreten Zahlen.' }
             ]
           },
@@ -817,11 +817,11 @@ const scenarios = [
             type: 'objection',
             title: 'Implementierungsaufwand',
             description: 'Implementierung als machbar darstellen',
-            question: 'Der IT-Leiter sagt: "Die Implementierung wird zu aufwendig." Wie reagieren Sie?',
+            question: 'Der Export-Leiter sagt: "Wir haben schon genug zu lesen." Wie reagieren Sie?',
             options: [
               { id: 1, text: '„Das stimmt nicht."', correct: false, feedback: 'Zu defensiv. Ignoriert die Bedenken.' },
-              { id: 2, text: '„Ich verstehe Ihre Sorge. Wir bieten vollständige Implementierungsunterstützung, Schulungen und einen dedizierten Ansprechpartner. Viele Kunden sind nach 4-6 Wochen produktiv. Darf ich Ihnen unseren Implementierungsplan zeigen?"', correct: true, feedback: 'Perfekt! Konkrete Unterstützung, Zeitrahmen, Social Proof.' },
-              { id: 3, text: '„Sie müssen es einfach implementieren."', correct: false, feedback: 'Zu autoritär. Schafft Widerstand.' }
+              { id: 2, text: '„Das verstehe ich. Unser Fachinfodienst ist kompakt und fokussiert auf das Wesentliche. Sie können 4 Wochen kostenlos testen, um zu sehen, ob er Ihnen hilft. Viele Unternehmen sagen, dass er ihnen Zeit spart."', correct: true, feedback: 'Perfekt! Empathie, kostenloser Testzeitraum, Social Proof.' },
+              { id: 3, text: '„Sie müssen es einfach lesen."', correct: false, feedback: 'Zu autoritär. Schafft Widerstand.' }
             ]
           }
         ]
@@ -838,8 +838,8 @@ const scenarios = [
             description: 'Natürlich zum Abschluss führen',
             question: 'Die Geschäftsführung zeigt Interesse. Wie führen Sie zum Abschluss?',
             options: [
-              { id: 1, text: '„Wollen Sie jetzt kaufen?"', correct: false, feedback: 'Zu direkt. Wirkt aufdringlich.' },
-              { id: 2, text: '„Wie klingt das für Sie – sollen wir mit der Implementierung im nächsten Quartal starten? Ich bereite Ihnen gerne ein konkretes Angebot vor."', correct: true, feedback: 'Perfekt! Alternativfrage mit konkretem nächsten Schritt.' },
+              { id: 1, text: '„Wollen Sie jetzt abonnieren?"', correct: false, feedback: 'Zu direkt. Wirkt aufdringlich.' },
+              { id: 2, text: '„Wie klingt das für Sie – sollen wir mit dem kostenlosen 4-Wochen-Test starten? Danach können Sie entscheiden, ob Sie die Zeitschrift behalten möchten."', correct: true, feedback: 'Perfekt! Alternativfrage mit kostenlosem Testzeitraum, danach Option die Zeitschrift zu behalten.' },
               { id: 3, text: '„Sie können sich ja noch überlegen."', correct: false, feedback: 'Zu passiv. Verpasste Chance.' }
             ]
           }
@@ -849,13 +849,13 @@ const scenarios = [
   },
   { 
     id: 'sekretaerin', 
-    title: 'Sekretärin - Gatekeeper überwinden', 
+    title: 'Sekretärin - Gatekeeper überwinden für Fachinfodienst', 
     industry: 'sales', 
     difficulty: 'beginner',
-    description: 'Gatekeeper überwinden und Termin vereinbaren',
-    situation: 'Sie versuchen einen Termin mit dem Geschäftsführer zu vereinbaren',
+    description: 'Gatekeeper überwinden und Termin für Fachinfodienst vereinbaren',
+    situation: 'Sie versuchen einen Termin mit dem Geschäftsführer zu vereinbaren, um einen Fachinfodienst vorzustellen',
     challenge: 'Die Sekretärin blockiert alle Verkaufsgespräche',
-    goal: 'Termin mit Entscheidungsträger vereinbaren',
+    goal: 'Termin mit Entscheidungsträger vereinbaren für kostenlosen Testzeitraum des Fachinfodienstes',
     timeLimit: 8,
     stakeholders: ['Sekretärin', 'Geschäftsführer'],
     objections: ['Keine Zeit', 'Nicht interessiert', 'Bereits andere Anbieter', 'Zu teuer'],
@@ -879,7 +879,7 @@ const scenarios = [
             question: 'Sie rufen an und die Sekretärin geht ran. Wie beginnen Sie?',
             options: [
               { id: 1, text: '„Ich möchte mit dem Geschäftsführer sprechen."', correct: false, feedback: 'Zu direkt. Ignoriert die Sekretärin.' },
-              { id: 2, text: '„Guten Tag, mein Name ist [Ihr Name]. Ich helfe Unternehmen bei [Nutzen]. Ist der Geschäftsführer verfügbar?"', correct: true, feedback: 'Perfekt! Höflich, klar, zeigt Wert.' },
+              { id: 2, text: '„Guten Tag, mein Name ist [Ihr Name]. Ich biete einen Fachinfodienst mit kostenlosem Testzeitraum an. Ist der Geschäftsführer verfügbar?"', correct: true, feedback: 'Perfekt! Höflich, klar, zeigt Wert und kostenlosen Testzeitraum.' },
               { id: 3, text: '„Ist der Chef da?"', correct: false, feedback: 'Zu unprofessionell und respektlos.' }
             ]
           }
@@ -928,8 +928,8 @@ const scenarios = [
             description: 'Kurzer, überzeugender Nutzen',
             question: 'Die Sekretärin fragt: "Worum geht es denn?" Wie antworten Sie?',
             options: [
-              { id: 1, text: '„Wir verkaufen Software."', correct: false, feedback: 'Zu vage. Kein Nutzen.' },
-              { id: 2, text: '„Wir helfen Unternehmen, [konkrete Zeitersparnis/Messgröße] zu erreichen. Ein 15-Minuten-Gespräch reicht, um zu sehen, ob es passt."', correct: true, feedback: 'Perfekt! Konkreter Nutzen, niedrige Hürde.' },
+              { id: 1, text: '„Wir verkaufen Fachinfodienste."', correct: false, feedback: 'Zu vage. Kein Nutzen.' },
+              { id: 2, text: '„Wir bieten einen Fachinfodienst mit kostenlosem 4-Wochen-Test an. Ein 15-Minuten-Gespräch reicht, um zu sehen, ob es passt. Danach kann die Zeitschrift behalten werden."', correct: true, feedback: 'Perfekt! Konkreter Nutzen, kostenloser Testzeitraum, niedrige Hürde.' },
               { id: 3, text: '„Das ist kompliziert zu erklären."', correct: false, feedback: 'Wirkt unsicher. Kein Vertrauen.' }
             ]
           }
@@ -958,13 +958,13 @@ const scenarios = [
   },
   { 
     id: 'datenschutz', 
-    title: 'Datenschutz - DSB-Bewertung einer SaaS-Lösung', 
+    title: 'Datenschutz - Fachinfodienst für DSGVO-Compliance', 
     industry: 'compliance', 
     difficulty: 'intermediate',
-    description: 'DSGVO-konforme SaaS-Lösung verkaufen',
-    situation: 'Sie verkaufen eine SaaS-Lösung an ein Unternehmen mit DSB',
-    challenge: 'Datenschutzbeauftragter prüft DSGVO-Konformität',
-    goal: 'Vertrag über 30.000€/Jahr abschließen',
+    description: 'Fachinfodienst für Datenschutz mit kostenlosem Testzeitraum verkaufen',
+    situation: 'Sie verkaufen einen Fachinfodienst für Datenschutz und DSGVO-Compliance an ein Unternehmen mit DSB',
+    challenge: 'Datenschutzbeauftragter prüft Nutzen und Aktualität der Informationen',
+    goal: 'Abonnement für Fachinfodienst abschließen - kostenloser Testzeitraum, danach kann die Zeitschrift behalten werden',
     timeLimit: 20,
     stakeholders: ['DSB', 'Geschäftsführung', 'IT-Leiter', 'Rechtsabteilung'],
     objections: ['DSGVO-Risiko', 'Subprozessoren unklar', 'Löschkonzept unzureichend', 'AVV fehlt'],
@@ -987,9 +987,9 @@ const scenarios = [
             description: 'Expertise des DSB anerkennen',
             question: 'Sie treffen den Datenschutzbeauftragten. Wie eröffnen Sie das Gespräch?',
             options: [
-              { id: 1, text: '„Ich habe eine DSGVO-konforme Lösung."', correct: false, feedback: 'Zu direkt. Fehlt Respekt für die Expertise des DSB.' },
-              { id: 2, text: '„Guten Tag, vielen Dank für Ihre Zeit. Ich weiß, dass Datenschutz für Sie Priorität hat. Welche Anforderungen haben Sie an SaaS-Lösungen?"', correct: true, feedback: 'Perfekt! Zeigt Respekt und Interesse an den Anforderungen.' },
-              { id: 3, text: '„Ich verkaufe Software."', correct: false, feedback: 'Zu verkaufsorientiert. Kunde fühlt sich unter Druck gesetzt.' }
+              { id: 1, text: '„Ich habe einen DSGVO-Fachinfodienst."', correct: false, feedback: 'Zu direkt. Fehlt Respekt für die Expertise des DSB.' },
+              { id: 2, text: '„Guten Tag, vielen Dank für Ihre Zeit. Ich weiß, dass Datenschutz für Sie Priorität hat. Wie informieren Sie sich aktuell über neue DSGVO-Anforderungen?"', correct: true, feedback: 'Perfekt! Zeigt Respekt und Interesse an der aktuellen Situation.' },
+              { id: 3, text: '„Ich verkaufe Fachinfodienste."', correct: false, feedback: 'Zu verkaufsorientiert. Kunde fühlt sich unter Druck gesetzt.' }
             ]
           }
         ]
@@ -1004,11 +1004,11 @@ const scenarios = [
             type: 'question',
             title: 'Situation verstehen',
             description: 'Aktuelle Datenschutz-Organisation analysieren',
-            question: 'Der DSB erwähnt, dass sie bereits mehrere SaaS-Lösungen nutzen. Wie vertiefen Sie das?',
+            question: 'Der DSB erwähnt, dass sie manchmal zu spät von neuen DSGVO-Anforderungen erfahren. Wie vertiefen Sie das?',
             options: [
-              { id: 1, text: '„Unsere Lösung ist besser."', correct: false, feedback: 'Zu kritisch. Ignoriert die aktuelle Situation.' },
-              { id: 2, text: '„Wie handhaben Sie aktuell die DSGVO-Compliance bei Ihren SaaS-Lösungen? Welche Herausforderungen gibt es?"', correct: true, feedback: 'Sehr gut! Offene Fragen, zeigt Interesse an Herausforderungen.' },
-              { id: 3, text: '„Unsere Lösung ist DSGVO-konform."', correct: false, feedback: 'Zu früh zur Lösung. Erst Situation verstehen.' }
+              { id: 1, text: '„Unser Fachinfodienst ist besser."', correct: false, feedback: 'Zu kritisch. Ignoriert die aktuelle Situation.' },
+              { id: 2, text: '„Was bedeutet das konkret? Welche Folgen hatte das schon? Wie wichtig ist es, immer aktuell informiert zu sein?"', correct: true, feedback: 'Sehr gut! Offene Fragen, zeigt Interesse an Problemen.' },
+              { id: 3, text: '„Unser Fachinfodienst informiert Sie sofort."', correct: false, feedback: 'Zu früh zur Lösung. Erst Situation verstehen.' }
             ]
           },
           {
@@ -1016,11 +1016,11 @@ const scenarios = [
             type: 'question',
             title: 'Problem-Identifikation',
             description: 'Datenschutz-Risiken identifizieren',
-            question: 'Der DSB erwähnt, dass die Prüfung neuer Lösungen zeitaufwendig ist. Wie vertiefen Sie das Problem?',
+            question: 'Der DSB erwähnt, dass veraltete Informationen zu Compliance-Risiken führen können. Wie vertiefen Sie das Problem?',
             options: [
-              { id: 1, text: '„Das ist ineffizient."', correct: false, feedback: 'Zu kritisch. Ignoriert die Komplexität.' },
-              { id: 2, text: '„Was bedeutet das konkret? Wie lange dauert eine Prüfung? Welche Risiken bestehen bei unzureichender Prüfung?"', correct: true, feedback: 'Perfekt! Problemfrage mit Implikation und Risikobewertung.' },
-              { id: 3, text: '„Unsere Lösung ist schnell geprüft."', correct: false, feedback: 'Zu früh zur Lösung. Erst Problem verstehen.' }
+              { id: 1, text: '„Das ist gefährlich."', correct: false, feedback: 'Zu alarmierend. Wirkt übertrieben.' },
+              { id: 2, text: '„Was bedeutet das konkret? Welche Risiken bestehen? Was wäre der Worst Case bei einem Fehler?"', correct: true, feedback: 'Perfekt! Problemfrage mit Implikation und Risikobewertung.' },
+              { id: 3, text: '„Unser Fachinfodienst verhindert Fehler."', correct: false, feedback: 'Zu früh zur Lösung. Erst Problem verstehen.' }
             ]
           },
           {
@@ -1047,10 +1047,10 @@ const scenarios = [
             type: 'question',
             title: 'Wert-Kommunikation',
             description: 'Mehrwert statt Features präsentieren',
-            question: 'Wie präsentieren Sie die DSGVO-Konformität wertorientiert?',
+            question: 'Wie präsentieren Sie den Fachinfodienst wertorientiert?',
             options: [
-              { id: 1, text: '„Unsere Lösung ist DSGVO-konform."', correct: false, feedback: 'Zu technisch. Kunde versteht den Wert nicht.' },
-              { id: 2, text: '„Wir erfüllen alle DSGVO-Anforderungen: Daten in Deutschland, vollständige AVVs, Löschkonzept, Datenschutzfolgenabschätzung. Das bedeutet: Keine Compliance-Risiken für Sie, schnelle Prüfung, mehr Sicherheit."', correct: true, feedback: 'Perfekt! Konkrete Maßnahmen, Wert und Nutzen klar kommuniziert.' },
+              { id: 1, text: '„Unser Fachinfodienst informiert über DSGVO."', correct: false, feedback: 'Zu technisch. Kunde versteht den Wert nicht.' },
+              { id: 2, text: '„Unser Fachinfodienst hält Sie immer aktuell über neue DSGVO-Anforderungen und Datenschutz-Themen. Das bedeutet: Keine Compliance-Risiken, schnelle Information, mehr Sicherheit. Sie können 4 Wochen kostenlos testen, danach können Sie die Zeitschrift behalten."', correct: true, feedback: 'Perfekt! Konkrete Maßnahmen, Wert und Nutzen klar kommuniziert, kostenloser Testzeitraum erwähnt.' },
               { id: 3, text: '„DSGVO ist wichtig."', correct: false, feedback: 'Zu vage. Kein konkreter Nutzen.' }
             ]
           },
@@ -1059,10 +1059,10 @@ const scenarios = [
             type: 'objection',
             title: 'Löschkonzept-Einwand',
             description: 'Löschkonzept transparent darstellen',
-            question: 'Der DSB fragt: "Wie funktioniert das Löschkonzept? Das ist unzureichend dokumentiert." Wie reagieren Sie?',
+            question: 'Der DSB sagt: "Das Abonnement ist zu teuer." Wie reagieren Sie?',
             options: [
-              { id: 1, text: '„Das ist kompliziert zu erklären."', correct: false, feedback: 'Wirkt unsicher. Kunde verliert Vertrauen.' },
-              { id: 2, text: '„Sehr gute Frage! Hier ist unser detailliertes Löschkonzept: Automatische Löschung nach [X] Jahren, manuelle Löschung auf Anfrage innerhalb von [Y] Tagen, vollständige Dokumentation. Darf ich Ihnen die Details zeigen?"', correct: true, feedback: 'Sehr gut! Konkret, transparent, vollständig.' },
+              { id: 1, text: '„Das ist der Preis."', correct: false, feedback: 'Zu passiv. Kein Wert kommuniziert.' },
+              { id: 2, text: '„Das verstehe ich. Sie können unseren Fachinfodienst 4 Wochen kostenlos testen. Danach können Sie entscheiden, ob Sie die Zeitschrift behalten möchten. Was kostet Sie fehlende oder veraltete Compliance-Informationen?"', correct: true, feedback: 'Sehr gut! Kostenloser Testzeitraum anbieten, Wert-Kommunikation mit Risikobewertung.' },
               { id: 3, text: '„Das ist kein Problem."', correct: false, feedback: 'Zu oberflächlich. Kunde braucht Details.' }
             ]
           },
@@ -1071,11 +1071,11 @@ const scenarios = [
             type: 'objection',
             title: 'AVV-Einwand',
             description: 'AVV-Vorlage anbieten und Transparenz zeigen',
-            question: 'Der DSB sagt: "Sie haben kein AVV vorgelegt." Wie reagieren Sie?',
+            question: 'Der DSB sagt: "Wir haben schon genug zu lesen." Wie reagieren Sie?',
             options: [
-              { id: 1, text: '„Das brauchen Sie nicht."', correct: false, feedback: 'Falsch! AVV ist bei Auftragsverarbeitung Pflicht.' },
-              { id: 2, text: '„Selbstverständlich! Hier ist unsere AVV-Vorlage nach Art. 28 DSGVO. Wir passen sie gerne an Ihre Anforderungen an. Haben Sie spezielle Anforderungen?"', correct: true, feedback: 'Perfekt! Professionell, transparent, kooperativ.' },
-              { id: 3, text: '„Das kommt später."', correct: false, feedback: 'Zu unverbindlich. Kunde braucht Sicherheit.' }
+              { id: 1, text: '„Das stimmt nicht."', correct: false, feedback: 'Zu defensiv. Ignoriert die Bedenken.' },
+              { id: 2, text: '„Das verstehe ich. Unser Fachinfodienst ist kompakt und fokussiert auf das Wesentliche. Sie können 4 Wochen kostenlos testen, um zu sehen, ob er Ihnen hilft. Viele DSBs sagen, dass er ihnen Zeit spart."', correct: true, feedback: 'Perfekt! Empathie, kostenloser Testzeitraum, Social Proof.' },
+              { id: 3, text: '„Sie müssen es einfach lesen."', correct: false, feedback: 'Zu autoritär. Schafft Widerstand.' }
             ]
           }
         ]
@@ -1092,8 +1092,8 @@ const scenarios = [
             description: 'Natürlich zum Abschluss führen',
             question: 'Der DSB zeigt grünes Licht und die Geschäftsführung ist interessiert. Wie führen Sie zum Abschluss?',
             options: [
-              { id: 1, text: '„Wollen Sie jetzt kaufen?"', correct: false, feedback: 'Zu direkt. Wirkt aufdringlich.' },
-              { id: 2, text: '„Perfekt! Wie klingt das für Sie – sollen wir den Vertrag für den 1. nächsten Monat starten? Ich bereite Ihnen gerne das finale Angebot mit allen DSGVO-Dokumenten vor."', correct: true, feedback: 'Perfekt! Alternativfrage mit konkretem Starttermin und DSGVO-Fokus.' },
+              { id: 1, text: '„Wollen Sie jetzt abonnieren?"', correct: false, feedback: 'Zu direkt. Wirkt aufdringlich.' },
+              { id: 2, text: '„Perfekt! Wie klingt das für Sie – sollen wir mit dem kostenlosen 4-Wochen-Test starten? Danach können Sie entscheiden, ob Sie die Zeitschrift behalten möchten."', correct: true, feedback: 'Perfekt! Alternativfrage mit kostenlosem Testzeitraum, danach Option die Zeitschrift zu behalten.' },
               { id: 3, text: '„Sie können sich ja noch überlegen."', correct: false, feedback: 'Zu passiv. Verpasste Chance.' }
             ]
           }
@@ -1164,10 +1164,10 @@ const scenarios = [
             type: 'objection',
             title: 'Preis-Einwand: ZHL-Methode',
             description: 'Zustimmen – Hinterfragen – Lösen anwenden',
-            question: 'Der Kunde sagt: "Das ist zu teuer für uns." Wie reagieren Sie mit der ZHL-Methode?',
+            question: 'Der Kunde sagt: "Das Abonnement ist zu teuer für uns." Wie reagieren Sie mit der ZHL-Methode?',
             options: [
               { id: 1, text: '„Das stimmt nicht, es ist günstig."', correct: false, feedback: 'Zu defensiv. Ignoriert den Einwand.' },
-              { id: 2, text: '„Das verstehe ich. Teuer im Vergleich zu was? Was kostet Sie die aktuelle Lösung an Zeit und Problemen?"', correct: true, feedback: 'Perfekt! ZHL-Methode: Zustimmen, Hinterfragen, dann Wert zeigen.' },
+              { id: 2, text: '„Das verstehe ich. Sie können unseren Fachinfodienst 4 Wochen kostenlos testen. Danach können Sie entscheiden, ob Sie die Zeitschrift behalten möchten. Teuer im Vergleich zu was? Was kostet Sie fehlende oder veraltete Informationen?"', correct: true, feedback: 'Perfekt! ZHL-Methode: Zustimmen, kostenloser Testzeitraum anbieten, Hinterfragen, dann Wert zeigen.' },
               { id: 3, text: '„Ich kann Ihnen 20% Rabatt geben."', correct: false, feedback: 'Zu schnell nachgegeben. Wert nicht kommuniziert.' }
             ]
           },
@@ -1198,7 +1198,7 @@ const scenarios = [
             question: 'Der Kunde sagt: "Wir haben gerade keine Zeit dafür." Wie reagieren Sie?',
             options: [
               { id: 1, text: '„Dann rufe ich später an."', correct: false, feedback: 'Zu passiv. Verpasste Chance.' },
-              { id: 2, text: '„Das verstehe ich. Was hat aktuell Priorität? Was würde passieren, wenn Sie das Problem nicht lösen?"', correct: true, feedback: 'Sehr gut! Prioritäten klären, Dringlichkeit zeigen.' },
+              { id: 2, text: '„Das verstehe ich. Sie können unseren Fachinfodienst 4 Wochen kostenlos testen - das kostet Sie keine Zeit. Was hat aktuell Priorität? Was würde passieren, wenn Sie wichtige Informationen verpassen?"', correct: true, feedback: 'Sehr gut! Kostenloser Testzeitraum anbieten, Prioritäten klären, Dringlichkeit zeigen.' },
               { id: 3, text: '„Sie müssen sich Zeit nehmen."', correct: false, feedback: 'Zu aufdringlich. Erzeugt Widerstand.' }
             ]
           },
@@ -1207,11 +1207,11 @@ const scenarios = [
             type: 'objection',
             title: 'Zeit sparen zeigen',
             description: 'Zeitersparnis als Wert kommunizieren',
-            question: 'Der Kunde sagt: "Die Implementierung kostet zu viel Zeit." Wie reagieren Sie?',
+            question: 'Der Kunde sagt: "Wir haben schon genug zu lesen." Wie reagieren Sie?',
             options: [
               { id: 1, text: '„Das stimmt nicht."', correct: false, feedback: 'Zu defensiv. Ignoriert die Bedenken.' },
-              { id: 2, text: '„Ich verstehe Ihre Sorge. Lassen Sie mich zeigen, wie Sie langfristig Zeit sparen: [konkrete Zeitersparnis]. Die Implementierung dauert [X] Wochen, danach sparen Sie [Y] Stunden pro Woche."', correct: true, feedback: 'Perfekt! Zeitersparnis konkret kommuniziert.' },
-              { id: 3, text: '„Sie müssen es einfach machen."', correct: false, feedback: 'Zu autoritär. Schafft Widerstand.' }
+              { id: 2, text: '„Das verstehe ich. Unser Fachinfodienst ist kompakt und fokussiert auf das Wesentliche. Sie können 4 Wochen kostenlos testen, um zu sehen, ob er Ihnen hilft. Viele Kunden sagen, dass er ihnen Zeit spart."', correct: true, feedback: 'Perfekt! Empathie, kostenloser Testzeitraum, Social Proof.' },
+              { id: 3, text: '„Sie müssen es einfach lesen."', correct: false, feedback: 'Zu autoritär. Schafft Widerstand.' }
             ]
           }
         ]
@@ -1229,7 +1229,7 @@ const scenarios = [
             question: 'Der Kunde sagt: "Ich traue dem nicht. Das klingt zu gut, um wahr zu sein." Wie reagieren Sie?',
             options: [
               { id: 1, text: '„Das stimmt schon."', correct: false, feedback: 'Zu defensiv. Ignoriert die Skepsis.' },
-              { id: 2, text: '„Ich verstehe, dass Sie skeptisch sind. Viele unserer Kunden dachten das auch (Felt), bis sie es ausprobiert haben (Found). Darf ich Ihnen Referenzen zeigen?"', correct: true, feedback: 'Perfekt! Feel-Felt-Found-Methode mit Social Proof.' },
+              { id: 2, text: '„Ich verstehe, dass Sie skeptisch sind. Viele unserer Kunden dachten das auch (Felt), bis sie unseren Fachinfodienst 4 Wochen kostenlos getestet haben (Found). Sie können es risikofrei testen. Darf ich Ihnen Referenzen zeigen?"', correct: true, feedback: 'Perfekt! Feel-Felt-Found-Methode mit kostenlosem Testzeitraum und Social Proof.' },
               { id: 3, text: '„Sie müssen mir vertrauen."', correct: false, feedback: 'Zu aufdringlich. Erzeugt Widerstand.' }
             ]
           },
@@ -1250,10 +1250,10 @@ const scenarios = [
             type: 'objection',
             title: 'Probezeit anbieten',
             description: 'Risiko reduzieren',
-            question: 'Der Kunde sagt: "Ich bin unsicher, ob das funktioniert." Wie reagieren Sie?',
+            question: 'Der Kunde sagt: "Ich bin unsicher, ob der Fachinfodienst uns hilft." Wie reagieren Sie?',
             options: [
-              { id: 1, text: '„Das funktioniert schon."', correct: false, feedback: 'Zu defensiv. Ignoriert die Unsicherheit.' },
-              { id: 2, text: '„Das verstehe ich. Wie wäre es mit einer 30-Tage-Probezeit? So können Sie es risikofrei testen. Wenn es nicht passt, kostet es Sie nichts."', correct: true, feedback: 'Perfekt! Risiko reduziert, natürlicher Abschluss.' },
+              { id: 1, text: '„Das hilft schon."', correct: false, feedback: 'Zu defensiv. Ignoriert die Unsicherheit.' },
+              { id: 2, text: '„Das verstehe ich. Wie wäre es mit einem kostenlosen 4-Wochen-Test? So können Sie es risikofrei testen. Wenn es nicht passt, kostet es Sie nichts. Danach können Sie entscheiden, ob Sie die Zeitschrift behalten möchten."', correct: true, feedback: 'Perfekt! Kostenloser Testzeitraum, Risiko reduziert, natürlicher Abschluss.' },
               { id: 3, text: '„Sie müssen es einfach probieren."', correct: false, feedback: 'Zu autoritär. Schafft Widerstand.' }
             ]
           }
@@ -1302,8 +1302,8 @@ const scenarios = [
             description: 'Natürlich zum Abschluss führen',
             question: 'Sie haben alle Einwände behandelt und der Kunde zeigt Interesse. Wie führen Sie zum Abschluss?',
             options: [
-              { id: 1, text: '„Wollen Sie jetzt kaufen?"', correct: false, feedback: 'Zu direkt. Wirkt aufdringlich.' },
-              { id: 2, text: '„Perfekt! Wie klingt das für Sie – sollen wir mit [konkreter nächster Schritt] starten?"', correct: true, feedback: 'Perfekt! Alternativfrage mit konkretem nächsten Schritt.' },
+              { id: 1, text: '„Wollen Sie jetzt abonnieren?"', correct: false, feedback: 'Zu direkt. Wirkt aufdringlich.' },
+              { id: 2, text: '„Perfekt! Wie klingt das für Sie – sollen wir mit dem kostenlosen 4-Wochen-Test starten? Danach können Sie entscheiden, ob Sie die Zeitschrift behalten möchten."', correct: true, feedback: 'Perfekt! Alternativfrage mit kostenlosem Testzeitraum, danach Option die Zeitschrift zu behalten.' },
               { id: 3, text: '„Sie können sich ja noch überlegen."', correct: false, feedback: 'Zu passiv. Verpasste Chance.' }
             ]
           }
