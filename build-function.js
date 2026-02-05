@@ -9,9 +9,7 @@ const fs = require('fs');
 
 const serverDir = path.join(__dirname, 'netlify', 'functions', 'server');
 fs.mkdirSync(serverDir, { recursive: true });
-const libDir = path.join(serverDir, 'lib');
-fs.mkdirSync(libDir, { recursive: true });
-const backendBundle = path.join(libDir, 'backend-bundle.mjs');
+const backendBundle = path.join(serverDir, 'backend-bundle.mjs');
 const serverEntry = path.join(__dirname, 'netlify', 'server-source.js');
 const serverOut = path.join(serverDir, 'index.js');
 
@@ -33,7 +31,7 @@ async function build() {
     format: 'cjs',
     outfile: serverOut,
     target: 'node18',
-    external: ['./lib/backend-bundle.mjs'],
+    external: ['./backend-bundle.mjs'],
   });
   console.log('Server bundle:', serverOut);
 }
