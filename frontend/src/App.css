@@ -1275,18 +1275,20 @@ body {
     backdrop-filter: blur(10px);
     border-top: 1px solid rgba(74, 85, 104, 0.3);
     border-bottom: 1px solid rgba(74, 85, 104, 0.3);
-    padding: 1rem 0;
+    padding: 0;
     margin-top: 1rem;
     max-height: 0;
     overflow: hidden;
     opacity: 0;
-    transition: max-height 0.3s ease, opacity 0.3s ease, padding 0.3s ease;
+    visibility: hidden;
+    transition: max-height 0.3s ease, opacity 0.3s ease, padding 0.3s ease, visibility 0.3s ease;
     z-index: 99;
   }
 
   .nav-tabs.mobile-menu-open {
     max-height: 500px;
     opacity: 1;
+    visibility: visible;
     padding: 1rem 0;
   }
 

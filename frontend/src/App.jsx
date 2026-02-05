@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { Routes, Route, NavLink, useSearchParams, useNavigate } from 'react-router-dom'
+import { Routes, Route, NavLink, useSearchParams, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from './AuthContext'
 import { apiFetch } from './api'
 import AuthModal from './AuthModal'
@@ -45,10 +45,12 @@ function useToast() {
 function Layout({ children }) {
   const { user, loading, logout, refreshUser, showAuthModal, setShowAuthModal } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
+  const location = useLocation()
   const [userMenuOpen, setUserMenuOpen] = React.useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false)
   const userMenuRef = React.useRef(null)
   const mobileMenuRef = React.useRef(null)
+  const mobileMenuToggleRef = React.useRef(null)
 
   useEffect(() => {
     if (searchParams.get('logged_in') === '1') {
@@ -73,11 +75,19 @@ function Layout({ children }) {
   React.useEffect(() => {
     if (!mobileMenuOpen) return
     const close = (e) => {
-      if (mobileMenuRef.current && !mobileMenuRef.current.contains(e.target)) setMobileMenuOpen(false)
+      if (mobileMenuRef.current && !mobileMenuRef.current.contains(e.target) && 
+          mobileMenuToggleRef.current && !mobileMenuToggleRef.current.contains(e.target)) {
+        setMobileMenuOpen(false)
+      }
     }
     document.addEventListener('click', close)
     return () => document.removeEventListener('click', close)
   }, [mobileMenuOpen])
+
+  // Schließe das mobile Menü, wenn die Route wechselt
+  React.useEffect(() => {
+    setMobileMenuOpen(false)
+  }, [location.pathname])
 
   return (
     <div className="app-container">
@@ -88,6 +98,7 @@ function Layout({ children }) {
           </NavLink>
           <button 
             type="button" 
+            ref={mobileMenuToggleRef}
             className="mobile-menu-toggle"
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
             aria-label="Menü öffnen"
