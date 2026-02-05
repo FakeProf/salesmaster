@@ -936,11 +936,15 @@ function Practice() {
   const [quizAnswer, setQuizAnswer] = React.useState(null)
   const [quizDifficulty, setQuizDifficulty] = React.useState('Mittel')
   const [quizScore, setQuizScore] = React.useState(0)
+  const [quizQuestions, setQuizQuestions] = React.useState([])
+  const [quizPerformance, setQuizPerformance] = React.useState(50)
   
   // Karteikarten State
   const [flashcardIndex, setFlashcardIndex] = React.useState(0)
   const [flashcardFlipped, setFlashcardFlipped] = React.useState(false)
   const [flashcardRating, setFlashcardRating] = React.useState(null)
+  const [flashcardPool, setFlashcardPool] = React.useState([])
+  const [flashcardDifficulty, setFlashcardDifficulty] = React.useState(null)
   
   // Rollenspiel State
   const [roleplayScenarioIndex, setRoleplayScenarioIndex] = React.useState(0)
@@ -3096,45 +3100,258 @@ function Practice() {
   }, [activeMode, user])
 
   // Handler Functions
-  const startAdaptiveQuiz = (topic) => {
+  const startAdaptiveQuiz = async (topic) => {
     setActiveMode('adaptive-quiz')
     setActiveTopic(topic)
     setQuizQuestionIndex(0)
     setQuizAnswer(null)
     setQuizScore(0)
     setQuizDifficulty('Mittel')
+    
+    // Lade adaptive Fragen basierend auf Spaced Repetition
+    if (user) {
+      try {
+        const moduleId = topic === 'Einwände' ? 'practice-quiz-einwaende' : 'practice-quiz-fragen'
+        const response = await apiFetch(`/api/quiz/questions/${moduleId}`)
+        const data = await response.json()
+        
+        if (data.targetDifficulty) {
+          setQuizDifficulty(data.targetDifficulty)
+        }
+        if (data.performance !== undefined) {
+          setQuizPerformance(data.performance)
+        }
+        
+        // Filtere Fragen basierend auf fälligen Wiederholungen und Schwierigkeit
+        const allQuestions = adaptiveQuizQuestions[topic] || []
+        const dueQuestionIds = new Set(data.dueQuestions || [])
+        
+        // Priorisiere fällige Fragen, dann neue Fragen mit passender Schwierigkeit
+        let filteredQuestions = []
+        
+        // 1. Fällige Fragen zuerst
+        const dueQuestions = allQuestions.filter((q, idx) => dueQuestionIds.has(idx))
+        filteredQuestions.push(...dueQuestions)
+        
+        // 2. Neue Fragen mit passender Schwierigkeit (priorisiere diese)
+        const newQuestions = allQuestions.filter((q, idx) => 
+          !dueQuestionIds.has(idx) && q.difficulty === data.targetDifficulty
+        )
+        filteredQuestions.push(...newQuestions)
+        
+        // 3. Falls nicht genug Fragen: Fragen mit ähnlicher Schwierigkeit hinzufügen
+        if (filteredQuestions.length < 10) {
+          const difficultyOrder = data.targetDifficulty === 'Einfach' 
+            ? ['Einfach', 'Mittel', 'Schwer']
+            : data.targetDifficulty === 'Mittel'
+            ? ['Mittel', 'Einfach', 'Schwer']
+            : ['Schwer', 'Mittel', 'Einfach']
+          
+          for (const diff of difficultyOrder) {
+            if (filteredQuestions.length >= 10) break
+            const additional = allQuestions.filter((q, idx) => 
+              !dueQuestionIds.has(idx) && 
+              q.difficulty === diff &&
+              !filteredQuestions.includes(q)
+            )
+            filteredQuestions.push(...additional.slice(0, 10 - filteredQuestions.length))
+          }
+        }
+        
+        // Mische die Fragen für Abwechslung, aber behalte Priorität: fällige zuerst
+        const dueCount = dueQuestions.length
+        const duePart = filteredQuestions.slice(0, dueCount).sort(() => Math.random() - 0.5)
+        const newPart = filteredQuestions.slice(dueCount).sort(() => Math.random() - 0.5)
+        filteredQuestions = [...duePart, ...newPart].slice(0, 15) // Mehr Fragen für bessere Anpassung
+        setQuizQuestions(filteredQuestions)
+      } catch (error) {
+        console.error('Error loading adaptive questions:', error)
+        // Fallback: alle Fragen verwenden
+        setQuizQuestions(adaptiveQuizQuestions[topic] || [])
+      }
+    } else {
+      // Nicht eingeloggt: Standard-Fragen verwenden
+      setQuizQuestions(adaptiveQuizQuestions[topic] || [])
+    }
   }
 
-  const handleQuizAnswer = (option) => {
+  const handleQuizAnswer = async (option) => {
     setQuizAnswer(option)
-    if (option.correct) {
-      setQuizScore(quizScore + 1)
-      // Erhöhe Schwierigkeit bei richtiger Antwort
-      if (quizDifficulty === 'Mittel') setQuizDifficulty('Schwer')
+    const wasCorrect = option.correct
+    const newScore = wasCorrect ? quizScore + 1 : quizScore
+    
+    // Berechne neue Performance
+    const totalAnswered = quizQuestionIndex + 1
+    const newPerformance = (newScore / totalAnswered) * 100
+    
+    // Dynamische Schwierigkeitsanpassung basierend auf Performance
+    const oldDifficulty = quizDifficulty
+    let newDifficulty = oldDifficulty
+    if (wasCorrect) {
+      // Bei richtiger Antwort: Erhöhe Schwierigkeit wenn Performance gut
+      if (newPerformance >= 80 && oldDifficulty === 'Mittel') {
+        newDifficulty = 'Schwer'
+      } else if (newPerformance >= 70 && oldDifficulty === 'Einfach') {
+        newDifficulty = 'Mittel'
+      }
+    } else {
+      // Bei falscher Antwort: Verringere Schwierigkeit wenn Performance schlecht
+      if (newPerformance < 50 && oldDifficulty === 'Mittel') {
+        newDifficulty = 'Einfach'
+      } else if (newPerformance < 60 && oldDifficulty === 'Schwer') {
+        newDifficulty = 'Mittel'
+      }
+    }
+    
+    setQuizScore(newScore)
+    setQuizDifficulty(newDifficulty)
+    setQuizPerformance(Math.round(newPerformance))
+    
+    // Wenn wir noch Fragen haben und die Schwierigkeit sich geändert hat, lade neue Fragen
+    if (quizQuestionIndex < quizQuestions.length - 1 && newDifficulty !== oldDifficulty && user) {
+      // Lade zusätzliche Fragen mit neuer Schwierigkeit für die nächsten Fragen
+      try {
+        const moduleId = activeTopic === 'Einwände' ? 'practice-quiz-einwaende' : 'practice-quiz-fragen'
+        const response = await apiFetch(`/api/quiz/questions/${moduleId}?difficulty=${newDifficulty}&limit=5`)
+        const data = await response.json()
+        
+        const allQuestions = adaptiveQuizQuestions[activeTopic] || []
+        const dueQuestionIds = new Set(data.dueQuestions || [])
+        
+        // Hole neue Fragen mit neuer Schwierigkeit
+        const newQuestions = allQuestions.filter((q, idx) => {
+          const isNotInCurrentPool = !quizQuestions.some(qq => qq === q)
+          const matchesDifficulty = q.difficulty === newDifficulty
+          const isDue = dueQuestionIds.has(idx)
+          return (isNotInCurrentPool && matchesDifficulty) || (isDue && matchesDifficulty)
+        })
+        
+        // Füge neue Fragen zum Pool hinzu
+        if (newQuestions.length > 0) {
+          const shuffledNew = newQuestions.sort(() => Math.random() - 0.5).slice(0, 3)
+          setQuizQuestions(prev => [...prev, ...shuffledNew])
+        }
+      } catch (error) {
+        console.error('Error loading additional questions:', error)
+      }
     }
   }
 
   const handleNextQuizQuestion = () => {
     if (user && quizAnswer !== null) {
       const moduleId = activeTopic === 'Einwände' ? 'practice-quiz-einwaende' : 'practice-quiz-fragen'
+      const currentQuestion = quizQuestions[quizQuestionIndex]
+      const questionId = adaptiveQuizQuestions[activeTopic].findIndex(q => q === currentQuestion)
+      
+      // Quality: 0-5 basierend auf Antwort und Schwierigkeit
+      // Schwierigere Fragen geben mehr Punkte bei richtiger Antwort
+      let quality = 0
+      if (quizAnswer?.correct) {
+        if (currentQuestion.difficulty === 'Schwer') quality = 5
+        else if (currentQuestion.difficulty === 'Mittel') quality = 4
+        else quality = 3
+      } else {
+        // Bei falscher Antwort: weniger Quality-Abzug bei schwierigeren Fragen
+        if (currentQuestion.difficulty === 'Schwer') quality = 2
+        else if (currentQuestion.difficulty === 'Mittel') quality = 1
+        else quality = 0
+      }
+      
       apiFetch('/api/insights/answer', {
         method: 'POST',
-        body: JSON.stringify({ moduleId, questionId: quizQuestionIndex, correct: quizAnswer?.correct })
+        body: JSON.stringify({ 
+          moduleId, 
+          questionId, 
+          correct: quizAnswer?.correct,
+          quality 
+        })
       }).catch(() => {})
     }
-    if (quizQuestionIndex < adaptiveQuizQuestions[activeTopic].length - 1) {
+    
+    if (quizQuestionIndex < quizQuestions.length - 1) {
       setQuizQuestionIndex(quizQuestionIndex + 1)
       setQuizAnswer(null)
     } else {
       setActiveMode(null)
+      showToast('Quiz abgeschlossen!', 'success')
     }
   }
 
-  const startFlashcards = () => {
+  const startFlashcards = async (difficulty = null) => {
     setActiveMode('flashcards')
     setFlashcardIndex(0)
     setFlashcardFlipped(false)
     setFlashcardRating(null)
+    setFlashcardDifficulty(difficulty)
+    
+    // Lade adaptive Karteikarten basierend auf Spaced Repetition
+    if (user) {
+      try {
+        const moduleId = 'practice-flashcards'
+        const url = difficulty 
+          ? `/api/flashcards/${moduleId}?difficulty=${difficulty}`
+          : `/api/flashcards/${moduleId}`
+        const response = await apiFetch(url)
+        const data = await response.json()
+        
+        // Filtere Karten basierend auf fälligen Wiederholungen und Schwierigkeit
+        const dueCardIds = new Set(data.dueCards?.map(c => c.questionId) || [])
+        const learnedCardIds = new Set(data.learnedCardIds || [])
+        
+        // Priorisiere fällige Karten
+        let filteredCards = []
+        
+        // 1. Fällige Karten zuerst (mit optionaler Schwierigkeitsfilterung)
+        const dueCards = flashcards.filter((card, idx) => {
+          const isDue = dueCardIds.has(idx)
+          if (difficulty) {
+            // Wenn Schwierigkeit gefiltert wird, prüfe auch die gespeicherte difficulty_rating
+            const cardData = data.dueCards?.find(c => c.questionId === idx)
+            return isDue && (cardData?.difficulty === difficulty || card.difficulty === difficulty)
+          }
+          return isDue
+        })
+        filteredCards.push(...dueCards)
+        
+        // 2. Neue Karten hinzufügen basierend auf Schwierigkeit
+        const newCards = flashcards.filter((card, idx) => {
+          if (dueCardIds.has(idx)) return false // Bereits in dueCards
+          if (learnedCardIds.has(idx)) return false // Bereits gelernt (aber nicht fällig)
+          
+          // Wenn Schwierigkeit gefiltert wird, nur Karten mit passender Schwierigkeit
+          if (difficulty) {
+            return card.difficulty === difficulty
+          }
+          
+          // Wenn keine Schwierigkeit gefiltert wird, alle neuen Karten
+          return true
+        })
+        
+        // Priorisiere neue Karten mit passender Schwierigkeit
+        if (difficulty) {
+          const matchingDifficulty = newCards.filter(c => c.difficulty === difficulty)
+          filteredCards.push(...matchingDifficulty)
+        } else {
+          filteredCards.push(...newCards)
+        }
+        
+        // Mische für Abwechslung
+        filteredCards = filteredCards.sort(() => Math.random() - 0.5)
+        setFlashcardPool(filteredCards)
+      } catch (error) {
+        console.error('Error loading adaptive flashcards:', error)
+        // Fallback: alle Karten verwenden, optional nach Schwierigkeit filtern
+        if (difficulty) {
+          // Filtere nach Schwierigkeit im Fallback
+          const filtered = flashcards.filter(card => card.difficulty === difficulty)
+          setFlashcardPool(filtered.length > 0 ? filtered : flashcards)
+        } else {
+          setFlashcardPool(flashcards)
+        }
+      }
+    } else {
+      setFlashcardPool(flashcards)
+    }
   }
 
   const handleFlashcardFlip = () => {
@@ -3143,24 +3360,58 @@ function Practice() {
 
   const handleFlashcardRating = (rating) => {
     setFlashcardRating(rating)
+    setFlashcardDifficulty(rating)
+    
     if (user) {
+      const currentCard = flashcardPool[flashcardIndex]
+      const questionId = flashcards.findIndex(c => c === currentCard)
+      
+      // Quality basierend auf Rating: Einfach=5, Mittel=4, Schwer=2
+      const qualityMap = { 'Einfach': 5, 'Mittel': 4, 'Schwer': 2 }
+      const quality = qualityMap[rating] || 3
       const correct = rating !== 'Schwer'
+      
       apiFetch('/api/insights/answer', {
         method: 'POST',
-        body: JSON.stringify({ moduleId: 'practice-flashcards', questionId: flashcardIndex, correct })
+        body: JSON.stringify({ 
+          moduleId: 'practice-flashcards', 
+          questionId, 
+          correct,
+          quality,
+          difficultyRating: rating 
+        })
       }).catch(() => {})
     }
-    // Schwierige Karten werden häufiger wiederholt
-    if (rating === 'Schwer' && flashcardIndex < flashcards.length - 1) {
-      // Karte bleibt im Pool
+    
+    // Schwierige Karten werden häufiger wiederholt (schnell wieder angezeigt)
+    // Einfache Karten werden seltener wiederholt (spät wieder im Stapel)
+    const newPool = [...flashcardPool]
+    
+    if (rating === 'Schwer') {
+      // "Schwer" = häufige Wiederholung: Karte bleibt im Pool und wird früher wieder gezeigt
+      // Verschiebe Karte einige Positionen nach vorne (z.B. 3-5 Positionen), damit sie schnell wieder kommt
+      const currentCard = newPool[flashcardIndex]
+      newPool.splice(flashcardIndex, 1)
+      const insertPosition = Math.min(flashcardIndex + 3, newPool.length)
+      newPool.splice(insertPosition, 0, currentCard)
+      setFlashcardPool(newPool)
+    } else if (rating === 'Einfach') {
+      // "Einfach" = seltene Wiederholung: Karte ans Ende verschieben (spät wieder im Stapel)
+      const currentCard = newPool[flashcardIndex]
+      newPool.splice(flashcardIndex, 1)
+      newPool.push(currentCard)
+      setFlashcardPool(newPool)
     }
+    // "Mittel" = keine Änderung der Position
+    
     setTimeout(() => {
-      if (flashcardIndex < flashcards.length - 1) {
+      if (flashcardIndex < flashcardPool.length - 1) {
         setFlashcardIndex(flashcardIndex + 1)
         setFlashcardFlipped(false)
         setFlashcardRating(null)
       } else {
         setActiveMode(null)
+        showToast('Karteikarten durchgearbeitet!', 'success')
       }
     }, 1000)
   }
@@ -3364,15 +3615,27 @@ function Practice() {
 
   // Render verschiedene Modi
   if (activeMode === 'adaptive-quiz') {
-    const questions = adaptiveQuizQuestions[activeTopic]
+    const questions = quizQuestions.length > 0 ? quizQuestions : (adaptiveQuizQuestions[activeTopic] || [])
     const question = questions[quizQuestionIndex]
+    
+    if (!question) {
+      return (
+        <div className="practice-container">
+          <div className="section-header">
+            <button className="btn-back" onClick={handleBack}>← Zurück</button>
+            <h2>Adaptives Quiz - {activeTopic}</h2>
+          </div>
+          <p>Keine Fragen verfügbar.</p>
+        </div>
+      )
+    }
     
     return (
       <div className="practice-container">
         <div className="section-header">
           <button className="btn-back" onClick={handleBack}>← Zurück</button>
           <h2>Adaptives Quiz - {activeTopic}</h2>
-          <p>Schwierigkeit: {quizDifficulty} | Punktestand: {quizScore}</p>
+          <p>Schwierigkeit: {quizDifficulty} | Punktestand: {quizScore}/{quizQuestionIndex + 1} | Performance: {quizPerformance}% | Fragen im Pool: {quizQuestions.length}</p>
         </div>
         <div className="question-container">
           <div className="question-card">
@@ -3409,14 +3672,27 @@ function Practice() {
   }
 
   if (activeMode === 'flashcards') {
-    const card = flashcards[flashcardIndex]
+    const cards = flashcardPool.length > 0 ? flashcardPool : flashcards
+    const card = cards[flashcardIndex]
+    
+    if (!card) {
+      return (
+        <div className="practice-container">
+          <div className="section-header">
+            <button className="btn-back" onClick={handleBack}>← Zurück</button>
+            <h2>Karteikarten</h2>
+          </div>
+          <p>Keine Karten verfügbar.</p>
+        </div>
+      )
+    }
     
     return (
       <div className="practice-container">
         <div className="section-header">
           <button className="btn-back" onClick={handleBack}>← Zurück</button>
           <h2>Karteikarten</h2>
-          <p>Karte {flashcardIndex + 1} von {flashcards.length}</p>
+          <p>Karte {flashcardIndex + 1} von {cards.length} {flashcardDifficulty ? `| Schwierigkeit: ${flashcardDifficulty}` : ''}</p>
         </div>
         <div className="flashcard-container">
           <div className={`flashcard ${flashcardFlipped ? 'flipped' : ''}`} onClick={handleFlashcardFlip}>
@@ -3741,7 +4017,10 @@ function Practice() {
       icon: 'fas fa-cards-blank',
       description: 'Lerne mit intelligenten Karteikarten. Schwierige Karten werden häufiger wiederholt.',
       buttons: [
-        { label: 'Karten starten', action: startFlashcards }
+        { label: 'Alle Karten', action: () => startFlashcards() },
+        { label: 'Einfach', action: () => startFlashcards('Einfach') },
+        { label: 'Mittel', action: () => startFlashcards('Mittel') },
+        { label: 'Schwer', action: () => startFlashcards('Schwer') }
       ]
     },
     {
@@ -4371,6 +4650,8 @@ function LeitfadenGenerator() {
   })
   const [currentGuideId, setCurrentGuideId] = React.useState(null)
   const nextId = React.useRef(1)
+  // State für eingeklappte Kapitel (alle am Anfang eingeklappt = false)
+  const [expandedChapters, setExpandedChapters] = React.useState({})
 
   // Laden eines Leitfadens zum Bearbeiten
   React.useEffect(() => {
@@ -4679,25 +4960,41 @@ function LeitfadenGenerator() {
           <h3>Vorgeschlagene Sätze nach Kapitel</h3>
           <p className="leitfaden-hint">Wähle pro Kapitel eine Variante – ziehen oder klicken, um sie in deinen Leitfaden zu übernehmen.</p>
           <div className="leitfaden-chapters">
-            {LEITFADEN_KAPITEL.map((kapitel) => (
-              <div key={kapitel.id} className="leitfaden-chapter">
-                <h4 className="leitfaden-chapter-title">{kapitel.title}</h4>
-                <div className="leitfaden-chips">
-                  {kapitel.options.map((satz, idx) => (
-                    <span
-                      key={idx}
-                      className="leitfaden-chip"
-                      draggable
-                      onDragStart={(e) => handleDragStart(e, 'suggest', idx, satz, kapitel.id)}
-                      onDragEnd={handleDragEnd}
-                      onClick={() => addToGuide(satz, false, kapitel.id)}
-                    >
-                      {satz}
+            {LEITFADEN_KAPITEL.map((kapitel) => {
+              const isExpanded = expandedChapters[kapitel.id] || false
+              return (
+                <div key={kapitel.id} className="leitfaden-chapter">
+                  <h4 
+                    className="leitfaden-chapter-title leitfaden-chapter-toggle"
+                    onClick={() => setExpandedChapters(prev => ({
+                      ...prev,
+                      [kapitel.id]: !isExpanded
+                    }))}
+                  >
+                    <span className="leitfaden-chapter-icon">
+                      {isExpanded ? '▼' : '▶'}
                     </span>
-                  ))}
+                    {kapitel.title}
+                  </h4>
+                  {isExpanded && (
+                    <div className="leitfaden-chips">
+                      {kapitel.options.map((satz, idx) => (
+                        <span
+                          key={idx}
+                          className="leitfaden-chip"
+                          draggable
+                          onDragStart={(e) => handleDragStart(e, 'suggest', idx, satz, kapitel.id)}
+                          onDragEnd={handleDragEnd}
+                          onClick={() => addToGuide(satz, false, kapitel.id)}
+                        >
+                          {satz}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
           <div className="leitfaden-custom">
             <label>Eigenen Satz hinzufügen</label>

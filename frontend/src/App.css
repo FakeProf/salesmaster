@@ -2177,6 +2177,27 @@ body {
   margin-bottom: 0.5rem;
 }
 
+.leitfaden-chapter-toggle {
+  cursor: pointer;
+  user-select: none;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  transition: opacity 0.2s;
+}
+
+.leitfaden-chapter-toggle:hover {
+  opacity: 0.8;
+}
+
+.leitfaden-chapter-icon {
+  display: inline-block;
+  font-size: 0.75rem;
+  width: 1rem;
+  text-align: center;
+  transition: transform 0.2s;
+}
+
 .leitfaden-chips {
   display: flex;
   flex-wrap: wrap;

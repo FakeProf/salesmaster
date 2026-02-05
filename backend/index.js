@@ -115,6 +115,22 @@ async function initializeDatabase() {
     `;
 
     await sql`
+      CREATE TABLE IF NOT EXISTS user_spaced_repetition (
+        id SERIAL PRIMARY KEY,
+        user_id VARCHAR(255) NOT NULL,
+        module_id VARCHAR(100) NOT NULL,
+        question_id INTEGER NOT NULL,
+        e_factor REAL DEFAULT 2.5,
+        interval_days INTEGER DEFAULT 1,
+        repetitions INTEGER DEFAULT 0,
+        next_review_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        last_reviewed TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        difficulty_rating VARCHAR(20),
+        UNIQUE(user_id, module_id, question_id)
+      )
+    `;
+
+    await sql`
       CREATE TABLE IF NOT EXISTS user_guides (
         id SERIAL PRIMARY KEY,
         user_id VARCHAR(255) NOT NULL,
@@ -1476,7 +1492,29 @@ app.post('/api/training-complete', async (req, res) => {
   }
 });
 
-// Lern-Insights: einzelne Antwort speichern (richtig/falsch pro Frage)
+// Spaced Repetition: E-Faktor Algorithmus (SuperMemo)
+function calculateEFactor(oldEFactor, quality) {
+  // Quality: 0-5 (0=komplett falsch, 5=perfekt)
+  // E-Faktor wird basierend auf Qualität angepasst
+  let newEFactor = oldEFactor + (0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02));
+  return Math.max(1.3, newEFactor); // Minimum 1.3
+}
+
+function calculateNextInterval(oldInterval, eFactor, quality) {
+  if (quality < 3) {
+    // Falsch beantwortet - zurück auf Anfang
+    return 1;
+  }
+  if (oldInterval === 0) {
+    return 1;
+  }
+  if (oldInterval === 1) {
+    return 6;
+  }
+  return Math.round(oldInterval * eFactor);
+}
+
+// Lern-Insights: einzelne Antwort speichern (richtig/falsch pro Frage) mit Spaced Repetition
 app.post('/api/insights/answer', async (req, res) => {
   try {
     const userId = req.session?.user?.id;
@@ -1486,11 +1524,13 @@ app.post('/api/insights/answer', async (req, res) => {
     if (!sql) {
       return res.json({ success: true });
     }
-    const { moduleId, questionId, correct } = req.body || {};
+    const { moduleId, questionId, correct, quality, difficultyRating } = req.body || {};
     if (!moduleId || typeof moduleId !== 'string') {
       return res.status(400).json({ error: 'moduleId erforderlich' });
     }
     const isCorrect = correct === true;
+    
+    // Speichere in user_question_stats (aggregiert)
     await sql`
       INSERT INTO user_question_stats (user_id, module_id, correct_answers, total_answers, updated_at)
       VALUES (${String(userId)}, ${moduleId}, ${isCorrect ? 1 : 0}, 1, ${new Date()})
@@ -1499,10 +1539,171 @@ app.post('/api/insights/answer', async (req, res) => {
         total_answers = user_question_stats.total_answers + 1,
         updated_at = ${new Date()}
     `;
+    
+    // Spaced Repetition: speichere pro Frage
+    if (typeof questionId === 'number' || typeof questionId === 'string') {
+      const qualityScore = quality !== undefined ? quality : (isCorrect ? 5 : 0);
+      
+      // Hole bestehende Spaced Repetition Daten
+      const existing = await sql`
+        SELECT e_factor, interval_days, repetitions
+        FROM user_spaced_repetition
+        WHERE user_id = ${String(userId)} AND module_id = ${moduleId} AND question_id = ${Number(questionId)}
+      `.catch(() => []);
+      
+      const oldEFactor = existing[0]?.e_factor || 2.5;
+      const oldInterval = existing[0]?.interval_days || 1;
+      const oldRepetitions = existing[0]?.repetitions || 0;
+      
+      // Berechne neue Werte
+      const newEFactor = calculateEFactor(oldEFactor, qualityScore);
+      const newInterval = calculateNextInterval(oldInterval, newEFactor, qualityScore);
+      const newRepetitions = qualityScore >= 3 ? oldRepetitions + 1 : 0;
+      
+      const nextReviewDate = new Date();
+      nextReviewDate.setDate(nextReviewDate.getDate() + newInterval);
+      
+      // Speichere difficulty_rating wenn vorhanden (z.B. von Karteikarten-Bewertung)
+      const difficultyValue = difficultyRating && ['Einfach', 'Mittel', 'Schwer'].includes(difficultyRating) 
+        ? difficultyRating 
+        : null;
+      
+      await sql`
+        INSERT INTO user_spaced_repetition (
+          user_id, module_id, question_id, e_factor, interval_days, repetitions,
+          next_review_date, last_reviewed, difficulty_rating
+        )
+        VALUES (
+          ${String(userId)}, ${moduleId}, ${Number(questionId)}, ${newEFactor},
+          ${newInterval}, ${newRepetitions}, ${nextReviewDate}, ${new Date()}, ${difficultyValue}
+        )
+        ON CONFLICT (user_id, module_id, question_id) DO UPDATE SET
+          e_factor = ${newEFactor},
+          interval_days = ${newInterval},
+          repetitions = ${newRepetitions},
+          next_review_date = ${nextReviewDate},
+          last_reviewed = ${new Date()},
+          difficulty_rating = COALESCE(${difficultyValue}, user_spaced_repetition.difficulty_rating)
+      `.catch(err => {
+        console.error('Error saving spaced repetition:', err);
+      });
+    }
+    
     res.json({ success: true });
   } catch (error) {
     console.error('Error saving insight answer:', error);
     res.status(500).json({ error: 'Fehler beim Speichern' });
+  }
+});
+
+// API: Hole Fragen für adaptives Quiz basierend auf Spaced Repetition
+app.get('/api/quiz/questions/:moduleId', async (req, res) => {
+  try {
+    const userId = req.session?.user?.id;
+    if (!userId) {
+      return res.status(401).json({ error: 'Nicht angemeldet' });
+    }
+    if (!sql) {
+      return res.json({ questions: [], dueQuestions: [] });
+    }
+    
+    const { moduleId } = req.params;
+    const { difficulty, limit = 10 } = req.query;
+    
+    // Hole Fragen die zur Wiederholung fällig sind
+    const dueQuestions = await sql`
+      SELECT question_id, e_factor, interval_days, repetitions, difficulty_rating
+      FROM user_spaced_repetition
+      WHERE user_id = ${String(userId)} 
+        AND module_id = ${moduleId}
+        AND next_review_date <= ${new Date()}
+      ORDER BY next_review_date ASC
+      LIMIT ${Number(limit)}
+    `.catch(() => []);
+    
+    // Hole neue Fragen (noch nicht gelernt)
+    const learnedQuestionIds = dueQuestions.map(q => q.question_id);
+    const learnedCondition = learnedQuestionIds.length > 0 
+      ? sql`AND question_id NOT IN ${sql(learnedQuestionIds)}`
+      : sql``;
+    
+    const difficultyFilter = difficulty 
+      ? sql`AND difficulty = ${difficulty}`
+      : sql``;
+    
+    // Für neue Fragen: Hole basierend auf aktueller Performance
+    const userStats = await sql`
+      SELECT correct_answers, total_answers
+      FROM user_question_stats
+      WHERE user_id = ${String(userId)} AND module_id = ${moduleId}
+    `.catch(() => []);
+    
+    const performance = userStats[0] 
+      ? (userStats[0].correct_answers / Math.max(userStats[0].total_answers, 1)) * 100
+      : 50;
+    
+    // Bestimme Schwierigkeit basierend auf Performance
+    let targetDifficulty = 'Mittel';
+    if (performance >= 80) targetDifficulty = 'Schwer';
+    else if (performance < 50) targetDifficulty = 'Einfach';
+    
+    res.json({
+      dueQuestions: dueQuestions.map(q => q.question_id),
+      targetDifficulty,
+      performance: Math.round(performance)
+    });
+  } catch (error) {
+    console.error('Error fetching quiz questions:', error);
+    res.status(500).json({ error: 'Fehler beim Laden der Fragen' });
+  }
+});
+
+// API: Hole Karteikarten basierend auf Schwierigkeit und Spaced Repetition
+app.get('/api/flashcards/:moduleId', async (req, res) => {
+  try {
+    const userId = req.session?.user?.id;
+    if (!userId) {
+      return res.status(401).json({ error: 'Nicht angemeldet' });
+    }
+    if (!sql) {
+      return res.json({ cards: [], dueCards: [] });
+    }
+    
+    const { moduleId } = req.params;
+    const { difficulty } = req.query;
+    
+    // Hole Karten die zur Wiederholung fällig sind
+    const dueCards = await sql`
+      SELECT question_id, e_factor, interval_days, repetitions, difficulty_rating
+      FROM user_spaced_repetition
+      WHERE user_id = ${String(userId)} 
+        AND module_id = ${moduleId}
+        AND next_review_date <= ${new Date()}
+        ${difficulty ? sql`AND difficulty_rating = ${difficulty}` : sql``}
+      ORDER BY next_review_date ASC, e_factor ASC
+    `.catch(() => []);
+    
+    // Hole alle bereits gelernten Karten-IDs für Filterung
+    const learnedCardIds = await sql`
+      SELECT DISTINCT question_id
+      FROM user_spaced_repetition
+      WHERE user_id = ${String(userId)} 
+        AND module_id = ${moduleId}
+    `.catch(() => []);
+    
+    const learnedIdsSet = new Set(learnedCardIds.map(c => c.question_id));
+    
+    res.json({
+      dueCards: dueCards.map(c => ({
+        questionId: c.question_id,
+        difficulty: c.difficulty_rating,
+        repetitions: c.repetitions
+      })),
+      learnedCardIds: Array.from(learnedIdsSet)
+    });
+  } catch (error) {
+    console.error('Error fetching flashcards:', error);
+    res.status(500).json({ error: 'Fehler beim Laden der Karteikarten' });
   }
 });
 
