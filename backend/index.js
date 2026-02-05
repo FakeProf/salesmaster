@@ -2000,12 +2000,17 @@ ${criteriaList}
 2. Gib konstruktives Feedback zur gegebenen Antwort
 3. Erstelle eine BEISPIELANTWORT, die der Verkäufer hätte geben können, um 15/15 Punkte zu erreichen
 
-**WICHTIG für die Beispielantwort:**
+**KRITISCH WICHTIG für die Beispielantwort - Professionelle Verkaufsstimme:**
 - Die Beispielantwort muss eine VOLLSTÄNDIGE Antwort des Verkäufers sein (nicht nur die Situation wiederholen!)
 - Sie muss direkt auf die Situation "${situation}" antworten
 - Sie muss alle Bewertungskriterien perfekt erfüllen
-- Sie sollte konkret, überzeugend und wertorientiert sein
-- Sie sollte zeigen, wie man optimal auf die Kundenaussage reagiert
+- **SELBSTBEWUSST & PROFESSIONELL:** Die Antwort soll selbstbewusst und professionell klingen, NICHT defensiv oder rechtfertigend
+- **WERTORIENTIERT:** Fokus auf den Mehrwert für den Kunden, nicht auf Rechtfertigung oder Entschuldigungen
+- **PARTNERSCHAFTLICH:** Der Verkäufer bietet eine Lösung an, der Kunde kommt aus eigenem Interesse - nicht weil der Verkäufer ihn braucht
+- **KEINE DEFENSIVITÄT:** Vermeide Formulierungen wie "Ich verstehe Ihre Bedenken", "Lassen Sie mich erklären", "Wir sind wirklich gut" - stattdessen: Fakten, Nutzen, konkrete Lösungen
+- **SERIÖS & EXPERTENHAFT:** Die Antwort soll zeigen, dass der Verkäufer ein Experte ist, der dem Kunden hilft, nicht jemand der um den Kunden kämpft
+- Konkret, überzeugend und wertorientiert sein
+- Zeigen, wie man optimal auf die Kundenaussage reagiert, ohne sich zu rechtfertigen
 
 Gib die Antwort als JSON-Objekt zurück im Format:
 {
@@ -2015,8 +2020,8 @@ Gib die Antwort als JSON-Objekt zurück im Format:
     "${criteria[2]}": <0-5>
   },
   "totalScore": <Summe aller Punkte>,
-  "feedback": "<Konstruktives Feedback zur gegebenen Antwort, was gut war und was verbessert werden kann>",
-  "bestAnswer": "<VOLLSTÄNDIGE Beispielantwort des Verkäufers, die direkt auf die Situation antwortet und alle Kriterien perfekt erfüllt. NICHT die Situation wiederholen, sondern eine echte Verkäuferantwort geben!>"
+  "feedback": "<Konstruktives Feedback zur gegebenen Antwort, was gut war und was verbessert werden kann. Achte darauf, ob die Antwort defensiv oder rechtfertigend klingt - das sollte vermieden werden.>",
+  "bestAnswer": "<VOLLSTÄNDIGE Beispielantwort des Verkäufers, die direkt auf die Situation antwortet und alle Kriterien perfekt erfüllt. Die Antwort muss SELBSTBEWUSST, PROFESSIONELL und WERTORIENTIERT sein - NICHT defensiv oder rechtfertigend. Zeige, dass der Verkäufer ein Experte ist, der dem Kunden hilft, nicht jemand der um den Kunden kämpft.>"
 }`;
     
     const groqResponse = await fetch('https://api.groq.com/openai/v1/chat/completions', {
@@ -2030,7 +2035,7 @@ Gib die Antwort als JSON-Objekt zurück im Format:
         messages: [
           {
             role: 'system',
-            content: 'Du bist ein Experte für Verkaufstraining und Bewertung von Verkaufsgesprächen. Bewerte Antworten objektiv, konstruktiv und hilfreich. Gib immer konkrete Verbesserungsvorschläge. Wenn du eine Beispielantwort erstellst, muss diese eine VOLLSTÄNDIGE Antwort des Verkäufers sein, die direkt auf die Kundenaussage reagiert - nicht nur die Situation wiederholen!'
+            content: 'Du bist ein Experte für professionelles Verkaufstraining und Bewertung von Verkaufsgesprächen. Professionelle Verkäufer sind selbstbewusst, wertorientiert und partnerschaftlich - sie rechtfertigen sich nicht und kämpfen nicht um Kunden. Sie bieten Lösungen an, die Kunden aus eigenem Interesse nutzen. Bewerte Antworten objektiv, konstruktiv und hilfreich. Gib immer konkrete Verbesserungsvorschläge. Wenn du eine Beispielantwort erstellst, muss diese eine VOLLSTÄNDIGE, SELBSTBEWUSSTE und PROFESSIONELLE Antwort des Verkäufers sein, die direkt auf die Kundenaussage reagiert - NICHT defensiv oder rechtfertigend, sondern wertorientiert und expertenhaft. Die Antwort soll zeigen, dass der Verkäufer dem Kunden hilft, nicht dass er den Kunden braucht.'
           },
           {
             role: 'user',
@@ -2143,7 +2148,7 @@ Gib die Antwort als JSON-Objekt zurück im Format:
         console.log('bestAnswer missing or too short, generating new one...');
         try {
           // Zweiter API-Call nur für die Beispielantwort
-          const bestAnswerPrompt = `Erstelle eine VOLLSTÄNDIGE Beispielantwort für einen Verkäufer, die auf folgende Kundenaussage reagiert:
+          const bestAnswerPrompt = `Erstelle eine VOLLSTÄNDIGE, PROFESSIONELLE Beispielantwort für einen Verkäufer, die auf folgende Kundenaussage reagiert:
 
 **Kundenaussage:**
 ${situation}
@@ -2154,8 +2159,22 @@ ${criteriaList}
 Die Antwort muss:
 - Direkt auf die Kundenaussage eingehen
 - Alle Kriterien perfekt erfüllen
+- SELBSTBEWUSST und PROFESSIONELL sein - NICHT defensiv oder rechtfertigend
+- WERTORIENTIERT: Fokus auf den Mehrwert für den Kunden, nicht auf Entschuldigungen
+- PARTNERSCHAFTLICH: Der Verkäufer ist ein Experte, der hilft - nicht jemand der um den Kunden kämpft
+- SERIÖS & EXPERTENHAFT: Zeige Expertise und Kompetenz, nicht Verzweiflung
 - Konkret, überzeugend und wertorientiert sein
 - Eine echte Verkäuferantwort sein (nicht die Situation wiederholen!)
+
+VERMEIDE:
+- Rechtfertigungen ("Ich verstehe Ihre Bedenken", "Lassen Sie mich erklären")
+- Defensive Formulierungen ("Wir sind wirklich gut", "Bitte geben Sie uns eine Chance")
+- Bittende Töne ("Es wäre toll, wenn...", "Könnten Sie vielleicht...")
+
+STATTDESSEN:
+- Fakten und konkrete Nutzen präsentieren
+- Lösungen anbieten, die den Kunden weiterbringen
+- Selbstbewusst und expertenhaft kommunizieren
 
 Gib NUR die Antwort zurück, ohne zusätzlichen Text oder Erklärungen.`;
 
@@ -2170,7 +2189,7 @@ Gib NUR die Antwort zurück, ohne zusätzlichen Text oder Erklärungen.`;
               messages: [
                 {
                   role: 'system',
-                  content: 'Du bist ein Experte für Verkaufsgespräche. Erstelle optimale Verkäuferantworten, die direkt auf Kundenaussagen reagieren.'
+                  content: 'Du bist ein Experte für professionelle Verkaufsgespräche. Professionelle Verkäufer sind selbstbewusst, wertorientiert und partnerschaftlich. Sie rechtfertigen sich nicht und kämpfen nicht um Kunden - sie bieten Lösungen an, die Kunden aus eigenem Interesse nutzen. Erstelle optimale, selbstbewusste Verkäuferantworten, die direkt auf Kundenaussagen reagieren, ohne defensiv oder rechtfertigend zu klingen. Die Antworten sollen zeigen, dass der Verkäufer ein Experte ist, der dem Kunden hilft.'
                 },
                 {
                   role: 'user',
@@ -2178,7 +2197,7 @@ Gib NUR die Antwort zurück, ohne zusätzlichen Text oder Erklärungen.`;
                 }
               ],
               temperature: 0.7,
-              max_tokens: 300
+              max_tokens: 500
             })
           });
           
