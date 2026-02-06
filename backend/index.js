@@ -18,7 +18,9 @@ console.log('Environment check:', {
 });
 
 import crypto from 'crypto';
- import express from 'express';
+import dns from 'dns/promises';
+import net from 'net';
+import express from 'express';
 import cors from 'cors';
 import session from 'express-session';
 import cookieParser from 'cookie-parser';
@@ -1331,6 +1333,124 @@ const scenarios = [
 
 app.get('/api/health', (_req, res) => {
   res.json({ ok: true });
+});
+
+// SMTP RCPT TO verification: prüft, ob die Mailbox auf dem MX-Server existiert.
+// Gibt zurück: { mailboxExists: true|false|null, smtpMessage?: string }
+// null = Prüfung nicht möglich (Timeout, Verbindungsfehler, temporäre Fehler).
+const SMTP_TIMEOUT_MS = 8000;
+
+function smtpVerifyMailbox(mxHost, email) {
+  return new Promise((resolve) => {
+    const host = mxHost.endsWith('.') ? mxHost.slice(0, -1) : mxHost;
+    const socket = net.createConnection(25, host, () => {});
+    let buffer = '';
+    let step = 'greeting';
+    const timeout = setTimeout(() => {
+      socket.destroy();
+      resolve({ mailboxExists: null, smtpMessage: 'Zeitüberschreitung beim Mailserver.' });
+    }, SMTP_TIMEOUT_MS);
+
+    socket.on('error', () => {
+      clearTimeout(timeout);
+      resolve({ mailboxExists: null, smtpMessage: 'Verbindung zum Mailserver fehlgeschlagen.' });
+    });
+
+    socket.on('data', (data) => {
+      buffer += data.toString();
+      const lines = buffer.split(/\r?\n/);
+      buffer = lines.pop() || '';
+      for (const line of lines) {
+        if (!line.length) continue;
+        const code = line.slice(0, 3);
+        const isLast = line.length === 3 || line[3] !== '-';
+        if (step === 'greeting' && code === '220' && isLast) {
+          step = 'ehlo';
+          socket.write('EHLO localhost\r\n');
+        } else if (step === 'ehlo' && code === '250' && isLast) {
+          step = 'mail';
+          socket.write('MAIL FROM:<>\r\n');
+        } else if (step === 'mail' && code === '250' && isLast) {
+          step = 'rcpt';
+          socket.write(`RCPT TO:<${email}>\r\n`);
+        } else if (step === 'rcpt' && isLast) {
+          clearTimeout(timeout);
+          socket.end();
+          const n = parseInt(code, 10);
+          const mailboxExists = n >= 250 && n <= 259 ? true : (n >= 550 && n <= 559) || n === 553 || n === 554 ? false : null;
+          resolve({ mailboxExists, smtpMessage: line.trim() });
+          return;
+        }
+      }
+    });
+
+    socket.on('close', () => {
+      if (step === 'rcpt') {
+        clearTimeout(timeout);
+        resolve({ mailboxExists: null, smtpMessage: 'Verbindung vor Antwort geschlossen.' });
+      }
+    });
+  });
+}
+
+app.post('/api/check-email', async (req, res) => {
+  try {
+    const { email } = req.body || {};
+    const trimmed = typeof email === 'string' ? email.trim().toLowerCase() : '';
+    if (!trimmed || !trimmed.includes('@')) {
+      return res.status(400).json({ valid: false, message: 'Ungültige E-Mail-Adresse.' });
+    }
+    const domain = trimmed.split('@')[1];
+    if (!domain || domain.length === 0) {
+      return res.status(400).json({ valid: false, message: 'Ungültige Domain.' });
+    }
+
+    let mxRecords = [];
+    try {
+      mxRecords = await dns.resolveMx(domain);
+    } catch {
+      return res.json({
+        valid: false,
+        domain,
+        message: `Keine MX-Records für ${domain} gefunden. Die Domain hat keinen konfigurierten Mailserver.`,
+      });
+    }
+    if (mxRecords.length === 0) {
+      return res.json({
+        valid: false,
+        domain,
+        message: `Keine MX-Records für ${domain} gefunden.`,
+      });
+    }
+
+    mxRecords.sort((a, b) => a.priority - b.priority);
+    const mxHost = mxRecords[0].exchange.endsWith('.') ? mxRecords[0].exchange.slice(0, -1) : mxRecords[0].exchange;
+    const mxDetails = mxRecords.map((m) => ({ host: m.exchange.replace(/\.$/, ''), priority: m.priority }));
+    const hosts = mxDetails.map((m) => m.host);
+
+    const { mailboxExists, smtpMessage } = await smtpVerifyMailbox(mxHost, trimmed);
+
+    let message = `Mailserver erreichbar: ${hosts.join(', ')}.`;
+    if (mailboxExists === true) message += ' Mailbox bestätigt.';
+    else if (mailboxExists === false) message += ' Mailbox unbekannt oder abgelehnt.';
+    else message += ' Mailbox-Prüfung nicht möglich (Timeout oder Server antwortet nicht).';
+
+    return res.json({
+      valid: true,
+      domain,
+      mx: hosts,
+      mxDetails,
+      mailboxExists,
+      smtpMessage: smtpMessage || undefined,
+      message,
+    });
+  } catch (err) {
+    console.error('check-email error:', err?.message || err);
+    return res.status(500).json({
+      valid: false,
+      message: 'Ein Fehler ist aufgetreten. Bitte versuchen Sie es erneut.',
+    });
+  }
 });
 
 app.get('/api/scenarios', async (req, res) => {
