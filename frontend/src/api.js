@@ -10,7 +10,8 @@ function isLocalHost() {
 function getDefaultBase() {
   const env = import.meta.env.VITE_API_URL;
   if (env) return env;
-  if (!isLocalHost()) return ''; // Live-Seite: nie localhost, nur VITE_API_URL
+  // Live: Kein VITE_API_URL → gleiche Origin (Netlify Redirect /api/* → server function)
+  if (!isLocalHost() && typeof window !== 'undefined') return window.location.origin;
   const stored = typeof sessionStorage !== 'undefined' && sessionStorage.getItem('salesmaster_api_base');
   if (stored) return stored;
   return `http://localhost:${DEFAULT_PORTS[0]}`;
