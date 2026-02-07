@@ -20,6 +20,7 @@ console.log('Environment check:', {
 import crypto from 'crypto';
 import dns from 'dns/promises';
 import net from 'net';
+import tls from 'tls';
 import express from 'express';
 import cors from 'cors';
 import session from 'express-session';
@@ -1336,14 +1337,14 @@ app.get('/api/health', (_req, res) => {
 });
 
 // SMTP RCPT TO verification: prüft, ob die Mailbox auf dem MX-Server existiert.
+// port: 25 (Standard) oder 587 (Fallback mit STARTTLS, oft von Cloud-Hosts erlaubt).
 // Gibt zurück: { mailboxExists: true|false|null, smtpMessage?: string }
-// null = Prüfung nicht möglich (Timeout, Verbindungsfehler, temporäre Fehler).
 const SMTP_TIMEOUT_MS = 8000;
 
-function smtpVerifyMailbox(mxHost, email) {
+function smtpVerifyMailbox(mxHost, email, port = 25) {
   return new Promise((resolve) => {
     const host = mxHost.endsWith('.') ? mxHost.slice(0, -1) : mxHost;
-    const socket = net.createConnection(25, host, () => {});
+    let socket = net.createConnection(port, host, () => {});
     let buffer = '';
     let step = 'greeting';
     const timeout = setTimeout(() => {
@@ -1351,12 +1352,27 @@ function smtpVerifyMailbox(mxHost, email) {
       resolve({ mailboxExists: null, smtpMessage: 'Zeitüberschreitung beim Mailserver.' });
     }, SMTP_TIMEOUT_MS);
 
+    const finish = (s, code, line) => {
+      clearTimeout(timeout);
+      try { socket.end(); } catch (_) {}
+      const n = parseInt(code, 10);
+      const mailboxExists = n >= 250 && n <= 259 ? true : (n >= 550 && n <= 559) || n === 553 || n === 554 ? false : null;
+      resolve({ mailboxExists, smtpMessage: line.trim() });
+    };
+
     socket.on('error', () => {
       clearTimeout(timeout);
       resolve({ mailboxExists: null, smtpMessage: 'Verbindung zum Mailserver fehlgeschlagen.' });
     });
 
-    socket.on('data', (data) => {
+    socket.on('close', () => {
+      if (step === 'rcpt') {
+        clearTimeout(timeout);
+        resolve({ mailboxExists: null, smtpMessage: 'Verbindung vor Antwort geschlossen.' });
+      }
+    });
+
+    const onData = (data) => {
       buffer += data.toString();
       const lines = buffer.split(/\r?\n/);
       buffer = lines.pop() || '';
@@ -1368,28 +1384,43 @@ function smtpVerifyMailbox(mxHost, email) {
           step = 'ehlo';
           socket.write('EHLO localhost\r\n');
         } else if (step === 'ehlo' && code === '250' && isLast) {
+          if (port === 587) {
+            step = 'starttls';
+            socket.write('STARTTLS\r\n');
+          } else {
+            step = 'mail';
+            socket.write('MAIL FROM:<>\r\n');
+          }
+        } else if (step === 'starttls' && code === '220' && isLast) {
+          socket.removeListener('data', onData);
+          const plain = socket;
+          socket = tls.connect({ socket: plain, servername: host, rejectUnauthorized: false }, () => {
+            socket.on('data', onData);
+            socket.write('EHLO localhost\r\n');
+            step = 'ehlo2';
+          });
+          socket.on('error', () => {
+            clearTimeout(timeout);
+            resolve({ mailboxExists: null, smtpMessage: 'STARTTLS fehlgeschlagen.' });
+          });
+        } else if (step === 'starttls' && isLast) {
+          clearTimeout(timeout);
+          socket.destroy();
+          resolve({ mailboxExists: null, smtpMessage: 'Server auf Port 587 unterstützt kein STARTTLS.' });
+        } else if (step === 'ehlo2' && code === '250' && isLast) {
           step = 'mail';
           socket.write('MAIL FROM:<>\r\n');
         } else if (step === 'mail' && code === '250' && isLast) {
           step = 'rcpt';
           socket.write(`RCPT TO:<${email}>\r\n`);
         } else if (step === 'rcpt' && isLast) {
-          clearTimeout(timeout);
-          socket.end();
-          const n = parseInt(code, 10);
-          const mailboxExists = n >= 250 && n <= 259 ? true : (n >= 550 && n <= 559) || n === 553 || n === 554 ? false : null;
-          resolve({ mailboxExists, smtpMessage: line.trim() });
+          finish(socket, code, line);
           return;
         }
       }
-    });
+    };
 
-    socket.on('close', () => {
-      if (step === 'rcpt') {
-        clearTimeout(timeout);
-        resolve({ mailboxExists: null, smtpMessage: 'Verbindung vor Antwort geschlossen.' });
-      }
-    });
+    socket.on('data', onData);
   });
 }
 
@@ -1428,12 +1459,22 @@ app.post('/api/check-email', async (req, res) => {
     const mxDetails = mxRecords.map((m) => ({ host: m.exchange.replace(/\.$/, ''), priority: m.priority }));
     const hosts = mxDetails.map((m) => m.host);
 
-    const { mailboxExists, smtpMessage } = await smtpVerifyMailbox(mxHost, trimmed);
+    let result = await smtpVerifyMailbox(mxHost, trimmed, 25);
+    if (result.mailboxExists === null && (result.smtpMessage?.includes('Zeitüberschreitung') || result.smtpMessage?.includes('fehlgeschlagen'))) {
+      const fallback = await smtpVerifyMailbox(mxHost, trimmed, 587);
+      if (fallback.mailboxExists !== null || (typeof fallback.smtpMessage === 'string' && (fallback.smtpMessage.startsWith('250') || fallback.smtpMessage.startsWith('550')))) result = fallback;
+    }
+    const { mailboxExists, smtpMessage } = result;
 
     let message = `Mailserver erreichbar: ${hosts.join(', ')}.`;
     if (mailboxExists === true) message += ' Mailbox bestätigt.';
     else if (mailboxExists === false) message += ' Mailbox unbekannt oder abgelehnt.';
     else message += ' Mailbox-Prüfung nicht möglich (Timeout oder Server antwortet nicht).';
+
+    let responseSmtpMessage = smtpMessage || undefined;
+    if (mailboxExists === null && (smtpMessage?.includes('Zeitüberschreitung') || smtpMessage?.includes('fehlgeschlagen'))) {
+      responseSmtpMessage = (smtpMessage || '') + ' Bei Netlify/Lambda ist Port 25 oft blockiert – für zuverlässige Mailbox-Prüfung Backend auf eigenem Server (z. B. EU-VPS) betreiben.';
+    }
 
     return res.json({
       valid: true,
@@ -1441,7 +1482,7 @@ app.post('/api/check-email', async (req, res) => {
       mx: hosts,
       mxDetails,
       mailboxExists,
-      smtpMessage: smtpMessage || undefined,
+      smtpMessage: responseSmtpMessage,
       message,
     });
   } catch (err) {
