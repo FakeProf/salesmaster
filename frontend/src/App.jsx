@@ -93,23 +93,25 @@ function Layout({ children }) {
     <div className="app-container">
       <header className="app-header">
         <div className="header-content">
-          <NavLink to="/" className="logo-link">
-            <h1>SalesMaster</h1>
-          </NavLink>
-          <button 
-            type="button" 
-            ref={mobileMenuToggleRef}
-            className="mobile-menu-toggle"
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            aria-label="Menü öffnen"
-            aria-expanded={mobileMenuOpen}
-          >
-            <span className="hamburger-icon">
-              <span></span>
-              <span></span>
-              <span></span>
-            </span>
-          </button>
+          <div className="header-left">
+            <button 
+              type="button" 
+              ref={mobileMenuToggleRef}
+              className="mobile-menu-toggle"
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              aria-label="Menü öffnen"
+              aria-expanded={mobileMenuOpen}
+            >
+              <span className="hamburger-icon">
+                <span></span>
+                <span></span>
+                <span></span>
+              </span>
+            </button>
+            <NavLink to="/" className="logo-link">
+              <h1>SalesMaster</h1>
+            </NavLink>
+          </div>
           <nav className={`nav-tabs ${mobileMenuOpen ? 'mobile-menu-open' : ''}`} ref={mobileMenuRef}>
             <NavLink to="/training" className="nav-tab" onClick={() => setMobileMenuOpen(false)}>Vertriebs-Training</NavLink>
             <NavLink to="/practice" className="nav-tab" onClick={() => setMobileMenuOpen(false)}>Übungsmodus</NavLink>
@@ -5341,6 +5343,9 @@ function MeineLeitfaeden() {
   const [showDeleteConfirm, setShowDeleteConfirm] = React.useState(null)
   const [convertedBullets, setConvertedBullets] = React.useState([])
   const [convertingBullets, setConvertingBullets] = React.useState(false)
+  const [selectedUSP, setSelectedUSP] = React.useState(null)
+  const [hoveredUSP, setHoveredUSP] = React.useState(null)
+  const [tooltipPos, setTooltipPos] = React.useState({ top: 0, left: 0 })
   const showToast = useToast()
 
   React.useEffect(() => {
@@ -5467,6 +5472,7 @@ function MeineLeitfaeden() {
     }
   }
 
+
   if (authLoading || loading) {
     return <div className="loading">Lade Leitfäden...</div>
   }
@@ -5482,10 +5488,93 @@ function MeineLeitfaeden() {
   }
 
   if (selectedGuide) {
+    // Normalisiere USPs
+    const usps = selectedGuide.usps 
+      ? (Array.isArray(selectedGuide.usps) 
+          ? { grundsaetzlich: selectedGuide.usps, gegenueberKonkurrenten: [], gegenueberAlterenMethoden: [] }
+          : selectedGuide.usps)
+      : { grundsaetzlich: [], gegenueberKonkurrenten: [], gegenueberAlterenMethoden: [] }
+    
+    const grundsaetzlich = usps.grundsaetzlich || []
+    const gegenueberKonkurrenten = usps.gegenueberKonkurrenten || []
+    const gegenueberAlterenMethoden = usps.gegenueberAlterenMethoden || []
+    
+    // Alle USPs für Sidebars sammeln
+    const allUSPs = [
+      ...grundsaetzlich.map((usp, idx) => ({ ...usp, category: 'grundsaetzlich', index: idx })),
+      ...gegenueberKonkurrenten.map((usp, idx) => ({ ...usp, category: 'gegenueberKonkurrenten', index: idx })),
+      ...gegenueberAlterenMethoden.map((usp, idx) => ({ ...usp, category: 'gegenueberAlterenMethoden', index: idx }))
+    ]
+    
+    // Generiere Einwände basierend auf den USPs
+    const generateObjections = (usps) => {
+      const objections = []
+      
+      // Standard-Einwände, die zu USPs passen
+      const standardObjections = [
+        {
+          title: 'Das ist mir zu teuer',
+          response: usps.grundsaetzlich.length > 0 
+            ? `Verstehe ich. Lassen Sie mich zeigen, warum sich die Investition lohnt: ${usps.grundsaetzlich[0]?.title || 'Unser Produkt bietet einen klaren Mehrwert'}. ${usps.grundsaetzlich[0]?.description || 'Der ROI überwiegt die Kosten deutlich.'}`
+            : 'Verstehe ich. Lassen Sie uns den konkreten Nutzen und ROI betrachten.'
+        },
+        {
+          title: 'Ich habe keine Zeit',
+          response: usps.grundsaetzlich.length > 0
+            ? `Das verstehe ich. Genau deshalb spart unser Produkt Zeit: ${usps.grundsaetzlich.find(u => u.title?.toLowerCase().includes('zeit') || u.description?.toLowerCase().includes('zeit'))?.description || usps.grundsaetzlich[0]?.description || 'Effizienzsteigerung'}`
+            : 'Verstehe ich. Unser Produkt spart langfristig Zeit durch Automatisierung.'
+        },
+        {
+          title: 'Ich kenne Ihre Firma nicht',
+          response: usps.grundsaetzlich.length > 0
+            ? `Das ist verständlich. Wir sind spezialisiert auf: ${usps.grundsaetzlich[0]?.title || 'Ihre Branche'}. ${usps.grundsaetzlich[0]?.description || 'Mit nachweisbaren Erfolgen.'}`
+            : 'Verstehe ich. Wir haben bereits viele erfolgreiche Projekte in Ihrer Branche.'
+        },
+        {
+          title: 'Die Konkurrenz ist günstiger',
+          response: usps.gegenueberKonkurrenten.length > 0
+            ? `Das kann sein. Der Unterschied liegt im Mehrwert: ${usps.gegenueberKonkurrenten[0]?.title || 'Qualität und Service'}. ${usps.gegenueberKonkurrenten[0]?.description || 'Langfristig ist unsere Lösung kosteneffizienter.'}`
+            : usps.grundsaetzlich.length > 0
+              ? `Der Preis allein sagt wenig aus. Entscheidend ist der Wert: ${usps.grundsaetzlich[0]?.description || 'Unser Produkt bietet mehr als nur einen niedrigen Preis.'}`
+              : 'Der Preis ist nur ein Faktor. Entscheidend ist der Gesamtnutzen und ROI.'
+        },
+        {
+          title: 'Wir haben das schon anders gelöst',
+          response: usps.gegenueberAlterenMethoden.length > 0
+            ? `Verstehe ich. Der Vorteil unserer Lösung: ${usps.gegenueberAlterenMethoden[0]?.title || 'Modernere Technologie'}. ${usps.gegenueberAlterenMethoden[0]?.description || 'Deutlich effizienter und zukunftssicherer.'}`
+            : usps.grundsaetzlich.length > 0
+              ? `Das ist gut. Unsere Lösung bietet zusätzlich: ${usps.grundsaetzlich[0]?.description || 'Moderne Technologie und bessere Ergebnisse.'}`
+              : 'Verstehe ich. Unsere Lösung bietet moderne Vorteile gegenüber älteren Methoden.'
+        },
+        {
+          title: 'Ich muss das erst mit meinem Team besprechen',
+          response: usps.grundsaetzlich.length > 0
+            ? `Das ist sinnvoll. Für die Besprechung: ${usps.grundsaetzlich[0]?.title || 'Die wichtigsten Vorteile'}. ${usps.grundsaetzlich[0]?.description || 'Das hilft bei der Entscheidungsfindung.'}`
+            : 'Gerne. Ich kann Ihnen eine Zusammenfassung der wichtigsten Punkte für die Besprechung geben.'
+        }
+      ]
+      
+      // Füge USP-spezifische Einwände hinzu
+      usps.grundsaetzlich.forEach((usp, idx) => {
+        if (idx < 3) { // Maximal 3 zusätzliche USP-bezogene Einwände
+          objections.push({
+            title: `Ist ${usp.title} wirklich so wichtig?`,
+            response: `Ja, absolut. ${usp.description} Das ist einer unserer Kernvorteile und macht den Unterschied.`
+          })
+        }
+      })
+      
+      return [...standardObjections, ...objections].slice(0, 8) // Maximal 8 Einwände
+    }
+    
+    // Links: Alle USPs, Rechts: Einwände
+    const leftUSPs = allUSPs
+    const objections = generateObjections(usps)
+    
     return (
       <div className="leitfaden-viewer-container">
         <div className="leitfaden-viewer-header">
-          <button className="btn btn-outline" onClick={() => setSelectedGuide(null)}>← Zurück</button>
+          <button className="btn btn-outline" onClick={() => { setSelectedGuide(null); setSelectedUSP(null); }}>← Zurück</button>
           <h2>{selectedGuide.title}</h2>
           <div className="leitfaden-viewer-actions">
             <button 
@@ -5505,125 +5594,186 @@ function MeineLeitfaeden() {
             </NavLink>
           </div>
         </div>
-        <div className="leitfaden-viewer-content">
-          {viewMode === 'full' ? (
-            <ol className="leitfaden-viewer-list">
-              {selectedGuide.items.map((item, idx) => (
-                <li key={idx} className="leitfaden-viewer-item">
-                  <span className="leitfaden-viewer-num">{idx + 1}.</span>
-                  <span className="leitfaden-viewer-text">{item.text}</span>
-                </li>
-              ))}
-            </ol>
-          ) : (
-            <div>
-              {convertingBullets ? (
-                <div className="loading-bullets">
-                  <p>Konvertiere zu Stichpunkten...</p>
+        <div className="leitfaden-viewer-layout">
+          {/* Linke Sidebar: USPs */}
+          <div className="leitfaden-viewer-sidebar leitfaden-viewer-sidebar-left">
+            <h3>USPs</h3>
+            {leftUSPs.length > 0 ? (
+              <div className="usp-sidebar-list">
+                {leftUSPs.map((usp, idx) => {
+                  const displayUSP = viewMode === 'bullets' ? compressUSP(usp) : usp
+                  const uspId = `left-${usp.category}-${usp.index}`
+                  const isHovered = hoveredUSP === uspId
+                  return (
+                    <div
+                      key={uspId}
+                      className="usp-sidebar-item"
+                      onMouseEnter={(e) => {
+                        const updatePos = () => {
+                          const rect = e.currentTarget.getBoundingClientRect()
+                          setTooltipPos({
+                            top: rect.top,
+                            left: rect.right + 10
+                          })
+                        }
+                        setHoveredUSP(uspId)
+                        updatePos()
+                        const handleScroll = () => updatePos()
+                        window.addEventListener('scroll', handleScroll, true)
+                        e.currentTarget._scrollHandler = handleScroll
+                      }}
+                      onMouseMove={(e) => {
+                        if (hoveredUSP === uspId) {
+                          const rect = e.currentTarget.getBoundingClientRect()
+                          setTooltipPos({
+                            top: rect.top,
+                            left: rect.right + 10
+                          })
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        setHoveredUSP(null)
+                        if (e.currentTarget._scrollHandler) {
+                          window.removeEventListener('scroll', e.currentTarget._scrollHandler, true)
+                          delete e.currentTarget._scrollHandler
+                        }
+                      }}
+                    >
+                      <div className="usp-sidebar-title">{displayUSP.title}</div>
+                      {isHovered && (
+                        <div 
+                          className="usp-sidebar-tooltip usp-sidebar-tooltip-left"
+                          style={{ top: `${tooltipPos.top}px`, left: `${tooltipPos.left}px` }}
+                        >
+                          <div className="usp-sidebar-tooltip-content">
+                            <strong>{displayUSP.title}</strong>
+                            <p>{displayUSP.description}</p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            ) : (
+              <p className="usp-sidebar-empty">Keine USPs verfügbar</p>
+            )}
+          </div>
+          
+          {/* Zentrale Content-Area */}
+          <div className="leitfaden-viewer-content">
+            {selectedUSP ? (
+              <div className="leitfaden-viewer-usp-detail">
+                <button className="btn btn-outline btn-sm" onClick={() => setSelectedUSP(null)} style={{ marginBottom: '1rem' }}>
+                  ← Zurück zum Leitfaden
+                </button>
+                <h3>{selectedUSP.title}</h3>
+                <div className="usp-detail-description">
+                  <p>{selectedUSP.description}</p>
                 </div>
-              ) : convertedBullets.length > 0 ? (
-                <ul className="leitfaden-viewer-bullets">
-                  {convertedBullets.map((bullet, idx) => (
-                    <li key={idx} className="leitfaden-viewer-bullet">{bullet}</li>
-                  ))}
-                </ul>
-              ) : (
-                <ul className="leitfaden-viewer-bullets">
-                  {selectedGuide.items.map((item, idx) => {
-                    // Fallback während Konvertierung
-                    const words = item.text.split(/\s+/).filter(w => w.length > 3).slice(0, 4)
-                    return (
-                      <li key={idx} className="leitfaden-viewer-bullet">• {words.join(' ')}</li>
-                    )
-                  })}
-                </ul>
-              )}
-            </div>
-          )}
-          {selectedGuide.usps && (
-            (() => {
-              // Normalisiere USPs (kann Array oder Objekt sein)
-              const usps = Array.isArray(selectedGuide.usps) 
-                ? { grundsaetzlich: selectedGuide.usps, gegenueberKonkurrenten: [], gegenueberAlterenMethoden: [] }
-                : selectedGuide.usps
-              
-              const grundsaetzlich = usps.grundsaetzlich || []
-              const gegenueberKonkurrenten = usps.gegenueberKonkurrenten || []
-              const gegenueberAlterenMethoden = usps.gegenueberAlterenMethoden || []
-              const hasAnyUSPs = grundsaetzlich.length > 0 || gegenueberKonkurrenten.length > 0 || gegenueberAlterenMethoden.length > 0
-              
-              if (!hasAnyUSPs) return null
-              
-              return (
-                <div className="leitfaden-viewer-usps">
-                  <h3>USPs</h3>
-                  
-                  {grundsaetzlich.length > 0 && (
-                    <div className="usp-category-section">
-                      <h4 className="usp-category-title">1. Grundsätzliche USPs</h4>
-                      <div className="usp-cards-grid">
-                        {grundsaetzlich.map((usp, idx) => {
-                          const compressedUSP = viewMode === 'bullets' ? compressUSP(usp) : usp
+              </div>
+            ) : (
+              <>
+                {viewMode === 'full' ? (
+                  <ol className="leitfaden-viewer-list">
+                    {selectedGuide.items.map((item, idx) => (
+                      <li key={idx} className="leitfaden-viewer-item">
+                        <span className="leitfaden-viewer-num">{idx + 1}.</span>
+                        <span className="leitfaden-viewer-text">{item.text}</span>
+                      </li>
+                    ))}
+                  </ol>
+                ) : (
+                  <div>
+                    {convertingBullets ? (
+                      <div className="loading-bullets">
+                        <p>Konvertiere zu Stichpunkten...</p>
+                      </div>
+                    ) : convertedBullets.length > 0 ? (
+                      <ul className="leitfaden-viewer-bullets">
+                        {convertedBullets.map((bullet, idx) => (
+                          <li key={idx} className="leitfaden-viewer-bullet">{bullet}</li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <ul className="leitfaden-viewer-bullets">
+                        {selectedGuide.items.map((item, idx) => {
+                          const words = item.text.split(/\s+/).filter(w => w.length > 3).slice(0, 4)
                           return (
-                            <div key={`grund-${idx}`} className="usp-card">
-                              <div className="usp-card-header">
-                                <h6 className="usp-card-title">{compressedUSP.title}</h6>
-                              </div>
-                              <div className="usp-card-body">
-                                <p className="usp-card-description">{compressedUSP.description}</p>
-                              </div>
-                            </div>
+                            <li key={idx} className="leitfaden-viewer-bullet">• {words.join(' ')}</li>
                           )
                         })}
-                      </div>
+                      </ul>
+                    )}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+          
+          {/* Rechte Sidebar: Einwände */}
+          <div className="leitfaden-viewer-sidebar leitfaden-viewer-sidebar-right">
+            <h3>Mögliche Einwände</h3>
+            {objections.length > 0 ? (
+              <div className="usp-sidebar-list">
+                {objections.map((objection, idx) => {
+                  const objectionId = `objection-${idx}`
+                  const isHovered = hoveredUSP === objectionId
+                  return (
+                    <div
+                      key={objectionId}
+                      className="usp-sidebar-item"
+                      onMouseEnter={(e) => {
+                        const updatePos = () => {
+                          const rect = e.currentTarget.getBoundingClientRect()
+                          setTooltipPos({
+                            top: rect.top,
+                            left: rect.left - 310
+                          })
+                        }
+                        setHoveredUSP(objectionId)
+                        updatePos()
+                        const handleScroll = () => updatePos()
+                        window.addEventListener('scroll', handleScroll, true)
+                        e.currentTarget._scrollHandler = handleScroll
+                      }}
+                      onMouseMove={(e) => {
+                        if (hoveredUSP === objectionId) {
+                          const rect = e.currentTarget.getBoundingClientRect()
+                          setTooltipPos({
+                            top: rect.top,
+                            left: rect.left - 310
+                          })
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        setHoveredUSP(null)
+                        if (e.currentTarget._scrollHandler) {
+                          window.removeEventListener('scroll', e.currentTarget._scrollHandler, true)
+                          delete e.currentTarget._scrollHandler
+                        }
+                      }}
+                    >
+                      <div className="usp-sidebar-title">{objection.title}</div>
+                      {isHovered && (
+                        <div 
+                          className="usp-sidebar-tooltip usp-sidebar-tooltip-right"
+                          style={{ top: `${tooltipPos.top}px`, left: `${tooltipPos.left}px` }}
+                        >
+                          <div className="usp-sidebar-tooltip-content">
+                            <strong>{objection.title}</strong>
+                            <p><strong>Antwort:</strong> {objection.response}</p>
+                          </div>
+                        </div>
+                      )}
                     </div>
-                  )}
-                  
-                  {gegenueberKonkurrenten.length > 0 && (
-                    <div className="usp-category-section">
-                      <h4 className="usp-category-title">2. USPs gegenüber ähnlichen Konkurrenten</h4>
-                      <div className="usp-cards-grid">
-                        {gegenueberKonkurrenten.map((usp, idx) => {
-                          const compressedUSP = viewMode === 'bullets' ? compressUSP(usp) : usp
-                          return (
-                            <div key={`konkurrent-${idx}`} className="usp-card">
-                              <div className="usp-card-header">
-                                <h6 className="usp-card-title">{compressedUSP.title}</h6>
-                              </div>
-                              <div className="usp-card-body">
-                                <p className="usp-card-description">{compressedUSP.description}</p>
-                              </div>
-                            </div>
-                          )
-                        })}
-                      </div>
-                    </div>
-                  )}
-                  
-                  {gegenueberAlterenMethoden.length > 0 && (
-                    <div className="usp-category-section">
-                      <h4 className="usp-category-title">3. USPs gegenüber älteren Methoden</h4>
-                      <div className="usp-cards-grid">
-                        {gegenueberAlterenMethoden.map((usp, idx) => {
-                          const compressedUSP = viewMode === 'bullets' ? compressUSP(usp) : usp
-                          return (
-                            <div key={`alt-${idx}`} className="usp-card">
-                              <div className="usp-card-header">
-                                <h6 className="usp-card-title">{compressedUSP.title}</h6>
-                              </div>
-                              <div className="usp-card-body">
-                                <p className="usp-card-description">{compressedUSP.description}</p>
-                              </div>
-                            </div>
-                          )
-                        })}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )
-            })()
-          )}
+                  )
+                })}
+              </div>
+            ) : (
+              <p className="usp-sidebar-empty">Keine Einwände verfügbar</p>
+            )}
+          </div>
         </div>
       </div>
     )

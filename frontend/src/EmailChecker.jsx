@@ -37,8 +37,8 @@ export default function EmailChecker() {
   return (
     <div className="email-checker-container">
       <div className="section-header">
-        <h2>E-Mail-Server- und Mailbox-Prüfung</h2>
-        <p>Prüft Mailserver (MX) und ob die Mailbox existiert (SMTP)</p>
+        <h2>E-Mail-Server-Prüfung</h2>
+        <p>Prüft, ob eine E-Mail-Adresse einen erreichbaren Mailserver hat</p>
       </div>
 
       <div className="email-checker-card">
@@ -61,7 +61,7 @@ export default function EmailChecker() {
             disabled={loading || !email}
             className="btn primary"
           >
-            {loading ? "Prüfe..." : "E-Mail prüfen"}
+            {loading ? "Prüfe..." : "Mailserver prüfen"}
           </button>
         </form>
 
@@ -80,21 +80,7 @@ export default function EmailChecker() {
               </h3>
             </div>
             <p className="result-message">{result.message}</p>
-
-            {result.valid && result.mailboxExists !== undefined && (
-              <p className="result-mailbox">
-                <strong>Mailbox:</strong>{" "}
-                {result.mailboxExists === true
-                  ? "✅ Bestätigt"
-                  : result.mailboxExists === false
-                    ? "❌ Unbekannt oder abgelehnt"
-                    : "⚠️ Prüfung nicht möglich"}
-                {result.smtpMessage && (
-                  <small className="smtp-detail"> ({result.smtpMessage})</small>
-                )}
-              </p>
-            )}
-
+            
             {result.valid && result.mx && (
               <div className="mx-details">
                 <h4>MX-Server:</h4>
@@ -125,9 +111,14 @@ export default function EmailChecker() {
         <div className="info-box">
           <h4>ℹ️ Hinweis</h4>
           <p>
-            Prüft Mailserver (MX) und ob die Mailbox per SMTP existiert. Die
-            E-Mail-Adresse wird nicht gespeichert und nur zur technischen
-            Prüfung verwendet. Das Backend (VITE_API_URL) muss erreichbar sein.
+            Dieses Tool prüft, ob für die angegebene E-Mail-Adresse ein Mailserver 
+            (MX-Record) konfiguriert ist. Die E-Mail-Adresse wird nicht gespeichert 
+            und nur zur technischen Prüfung verwendet.
+          </p>
+          <p style={{ marginTop: '1em', fontWeight: 'bold', color: '#d97706' }}>
+            ⚠️ Wichtig: Der Prefix (Teil vor dem @) wird <strong>nicht geprüft</strong>. 
+            Bitte achten Sie darauf, dass Sie den Prefix selbst korrekt eingeben 
+            (z. B. "mail@example.com" statt "ail@example.com").
           </p>
         </div>
       </div>
