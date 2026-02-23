@@ -138,10 +138,15 @@ function Layout({ children }) {
                       <NavLink to="/progress" className="header-user-menu-item" onClick={() => setUserMenuOpen(false)}>
                         Fortschritt
                       </NavLink>
+                      {user?.email?.toLowerCase().endsWith('@thomas-boeke.com') && (
+                        <NavLink to="/intern" className="header-user-menu-item" onClick={() => setUserMenuOpen(false)}>
+                          Intern
+                        </NavLink>
+                      )}
                       <button type="button" className="header-user-menu-item header-user-menu-logout" onClick={() => { setUserMenuOpen(false); logout(); }}>
                         Abmelden
                       </button>
-        </div>
+                    </div>
                   )}
                 </div>
               ) : (
@@ -4689,6 +4694,11 @@ function LeitfadenGenerator() {
   const nextId = React.useRef(1)
   // State für eingeklappte Kapitel (alle am Anfang eingeklappt = false)
   const [expandedChapters, setExpandedChapters] = React.useState({})
+  const [sharedFormulations, setSharedFormulations] = React.useState([])
+  const [showAddUSP, setShowAddUSP] = React.useState(false)
+  const [newUSPTitle, setNewUSPTitle] = React.useState('')
+  const [newUSPDescription, setNewUSPDescription] = React.useState('')
+  const [newUSPCategory, setNewUSPCategory] = React.useState('grundsaetzlich')
 
   // Laden eines Leitfadens zum Bearbeiten
   React.useEffect(() => {
@@ -4697,6 +4707,23 @@ function LeitfadenGenerator() {
       loadGuideForEdit(parseInt(editId, 10))
     }
   }, [searchParams, user])
+
+  // Geteilte Formulierungen (nur @thomas-boeke.com) für zusätzliche Chips
+  React.useEffect(() => {
+    if (!user?.email?.toLowerCase().endsWith('@thomas-boeke.com')) {
+      setSharedFormulations([])
+      return
+    }
+    apiFetch('/api/shared/formulations')
+      .then(r => r.ok ? r.json() : { formulations: [] })
+      .then(data => setSharedFormulations(data.formulations || []))
+      .catch(() => setSharedFormulations([]))
+  }, [user?.email])
+
+  const mergedChapters = React.useMemo(() => LEITFADEN_KAPITEL.map(k => ({
+    ...k,
+    options: [...(k.options || []), ...(sharedFormulations.filter(s => s.chapter_id === k.id).map(s => s.text))]
+  })), [sharedFormulations])
 
   const loadGuideForEdit = async (guideId) => {
     try {
@@ -4985,6 +5012,72 @@ function LeitfadenGenerator() {
     setShowUSPExtractor(false)
   }
 
+  const saveUSPsOnly = async () => {
+    if (getTotalUSPCount() === 0) {
+      showToast('Keine USPs zum Speichern vorhanden', 'error')
+      return
+    }
+    
+    if (!currentGuideId) {
+      showToast('Bitte erst einen Leitfaden speichern, bevor Sie USPs speichern können', 'error')
+      return
+    }
+
+    setSaving(true)
+    try {
+      const res = await apiFetch(`/api/guides/${currentGuideId}`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          title: saveTitle || 'Leitfaden',
+          items: guideItems,
+          usps: extractedUSPs
+        })
+      })
+
+      if (res.ok) {
+        showToast('USPs gespeichert', 'success')
+        setShowUSPExtractor(false)
+      } else {
+        const error = await res.json()
+        showToast(error.error || 'Fehler beim Speichern', 'error')
+      }
+    } catch (error) {
+      console.error('Fehler beim Speichern der USPs:', error)
+      showToast('Fehler beim Speichern', 'error')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const addManualUSP = () => {
+    if (!newUSPTitle.trim() || !newUSPDescription.trim()) {
+      showToast('Bitte Titel und Beschreibung ausfüllen', 'error')
+      return
+    }
+
+    const newUSP = {
+      title: newUSPTitle.trim(),
+      description: newUSPDescription.trim()
+    }
+
+    setExtractedUSPs(prev => {
+      const updated = { ...prev }
+      if (newUSPCategory === 'grundsaetzlich') {
+        updated.grundsaetzlich = [...(updated.grundsaetzlich || []), newUSP]
+      } else if (newUSPCategory === 'gegenueberKonkurrenten') {
+        updated.gegenueberKonkurrenten = [...(updated.gegenueberKonkurrenten || []), newUSP]
+      } else if (newUSPCategory === 'gegenueberAlterenMethoden') {
+        updated.gegenueberAlterenMethoden = [...(updated.gegenueberAlterenMethoden || []), newUSP]
+      }
+      return updated
+    })
+
+    setNewUSPTitle('')
+    setNewUSPDescription('')
+    setShowAddUSP(false)
+    showToast('USP hinzugefügt', 'success')
+  }
+
   return (
     <div className="leitfaden-container">
       <div className="section-header">
@@ -4997,7 +5090,7 @@ function LeitfadenGenerator() {
           <h3>Vorgeschlagene Sätze nach Kapitel</h3>
           <p className="leitfaden-hint">Wähle pro Kapitel eine Variante – ziehen oder klicken, um sie in deinen Leitfaden zu übernehmen.</p>
           <div className="leitfaden-chapters">
-            {LEITFADEN_KAPITEL.map((kapitel) => {
+            {mergedChapters.map((kapitel) => {
               const isExpanded = expandedChapters[kapitel.id] || false
               return (
                 <div key={kapitel.id} className="leitfaden-chapter">
@@ -5141,6 +5234,9 @@ function LeitfadenGenerator() {
               <button type="button" className="btn" onClick={handleCopy}>Leitfaden kopieren</button>
               <button type="button" className="btn btn-outline" onClick={() => setShowUSPExtractor(true)}>
                 USPs extrahieren
+              </button>
+              <button type="button" className="btn btn-outline" onClick={() => setShowAddUSP(true)}>
+                USP manuell hinzufügen
               </button>
               <button type="button" className="btn btn-primary" onClick={() => setShowSaveModal(true)}>
                 Leitfaden speichern
@@ -5310,6 +5406,11 @@ function LeitfadenGenerator() {
                   <button className="btn btn-primary" onClick={addUSPsToGuide}>
                     Alle USPs zu Leitfaden hinzufügen
                   </button>
+                  {currentGuideId && (
+                    <button className="btn btn-outline" onClick={saveUSPsOnly} disabled={saving}>
+                      {saving ? 'Speichere...' : 'USPs speichern (ohne zum Leitfaden hinzufügen)'}
+                    </button>
+                  )}
                 </div>
               </div>
             )}
@@ -5325,6 +5426,70 @@ function LeitfadenGenerator() {
                 disabled={extractingUSPs}
               >
                 Schließen
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: USP manuell hinzufügen */}
+      {showAddUSP && (
+        <div className="modal-overlay" onClick={() => setShowAddUSP(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h3>USP manuell hinzufügen</h3>
+            <div className="modal-form">
+              <label>
+                Kategorie:
+                <select
+                  value={newUSPCategory}
+                  onChange={(e) => setNewUSPCategory(e.target.value)}
+                  style={{ width: '100%', padding: '0.75rem', borderRadius: '6px', background: 'rgba(26, 32, 44, 0.8)', color: '#e2e8f0', border: '1px solid rgba(74, 85, 104, 0.5)' }}
+                >
+                  <option value="grundsaetzlich">Grundsätzliche USPs</option>
+                  <option value="gegenueberKonkurrenten">USPs gegenüber Konkurrenten</option>
+                  <option value="gegenueberAlterenMethoden">USPs gegenüber älteren Methoden</option>
+                </select>
+              </label>
+              <label>
+                Überschrift:
+                <input
+                  type="text"
+                  value={newUSPTitle}
+                  onChange={(e) => setNewUSPTitle(e.target.value)}
+                  placeholder="z. B. Schnelle Implementierung"
+                  style={{ width: '100%', padding: '0.75rem', borderRadius: '6px', background: 'rgba(26, 32, 44, 0.8)', color: '#e2e8f0', border: '1px solid rgba(74, 85, 104, 0.5)' }}
+                />
+              </label>
+              <label>
+                Inhalt:
+                <textarea
+                  value={newUSPDescription}
+                  onChange={(e) => setNewUSPDescription(e.target.value)}
+                  placeholder="Beschreibung des USP..."
+                  rows={4}
+                  style={{ width: '100%', padding: '0.75rem', borderRadius: '6px', background: 'rgba(26, 32, 44, 0.8)', color: '#e2e8f0', border: '1px solid rgba(74, 85, 104, 0.5)', resize: 'vertical' }}
+                />
+              </label>
+            </div>
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={addManualUSP}
+                disabled={!newUSPTitle.trim() || !newUSPDescription.trim()}
+              >
+                USP hinzufügen
+              </button>
+              <button
+                type="button"
+                className="btn btn-outline"
+                onClick={() => {
+                  setShowAddUSP(false)
+                  setNewUSPTitle('')
+                  setNewUSPDescription('')
+                }}
+              >
+                Abbrechen
               </button>
             </div>
           </div>
@@ -5346,7 +5511,14 @@ function MeineLeitfaeden() {
   const [selectedUSP, setSelectedUSP] = React.useState(null)
   const [hoveredUSP, setHoveredUSP] = React.useState(null)
   const [tooltipPos, setTooltipPos] = React.useState({ top: 0, left: 0 })
+  const [objections, setObjections] = React.useState(null)
+  const [loadingObjections, setLoadingObjections] = React.useState(false)
+  const [editingBullets, setEditingBullets] = React.useState(false)
+  const [bulletsEditText, setBulletsEditText] = React.useState('')
+  const [sharedGuides, setSharedGuides] = React.useState([])
+  const [loadingSharedGuides, setLoadingSharedGuides] = React.useState(false)
   const showToast = useToast()
+  const isThomasBoeke = user?.email?.toLowerCase().endsWith('@thomas-boeke.com')
 
   React.useEffect(() => {
     if (!user) {
@@ -5356,6 +5528,47 @@ function MeineLeitfaeden() {
     }
     loadGuides()
   }, [user])
+
+  React.useEffect(() => {
+    if (!isThomasBoeke) {
+      setSharedGuides([])
+      setLoadingSharedGuides(false)
+      return
+    }
+    setLoadingSharedGuides(true)
+    apiFetch('/api/shared/guides')
+      .then(r => r.ok ? r.json() : { guides: [] })
+      .then(data => { setSharedGuides(data.guides || []); setLoadingSharedGuides(false) })
+      .catch(() => { setSharedGuides([]); setLoadingSharedGuides(false) })
+  }, [isThomasBoeke])
+
+  // Situationsbezogene Einwände per API laden (zum Vorlesen, USPs dürfen interpretiert werden)
+  React.useEffect(() => {
+    if (!selectedGuide?.usps) {
+      setObjections(null)
+      return
+    }
+    const usps = Array.isArray(selectedGuide.usps)
+      ? { grundsaetzlich: selectedGuide.usps, gegenueberKonkurrenten: [], gegenueberAlterenMethoden: [] }
+      : selectedGuide.usps
+    const total = (usps.grundsaetzlich?.length || 0) + (usps.gegenueberKonkurrenten?.length || 0) + (usps.gegenueberAlterenMethoden?.length || 0)
+    if (total === 0) {
+      setObjections(null)
+      return
+    }
+    let cancelled = false
+    setLoadingObjections(true)
+    setObjections(null)
+    apiFetch('/api/guides/generate-objections', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ usps })
+    })
+      .then(res => res.ok ? res.json() : Promise.reject(new Error('Fehler beim Laden')))
+      .then(data => { if (!cancelled) { setObjections(data.objections || []); setLoadingObjections(false) } })
+      .catch(() => { if (!cancelled) { setObjections(null); setLoadingObjections(false) } })
+    return () => { cancelled = true }
+  }, [selectedGuide?.id, selectedGuide?.usps])
 
   const loadGuides = async () => {
     setLoading(true)
@@ -5393,85 +5606,86 @@ function MeineLeitfaeden() {
     }
   }
 
-  // Konvertiere automatisch wenn ViewMode auf bullets wechselt
+  const handleCopySharedGuideToMe = async (guide) => {
+    try {
+      const res = await apiFetch('/api/guides', {
+        method: 'POST',
+        body: JSON.stringify({
+          title: guide.title,
+          items: guide.items || [],
+          usps: guide.usps || null,
+          bullets: guide.bullets || null
+        })
+      })
+      if (res.ok) {
+        const data = await res.json()
+        if (data.guide) setGuides(prev => [...prev, { ...data.guide, id: data.guide.id, createdAt: data.guide.createdAt, updatedAt: data.guide.updatedAt }])
+        showToast('Kopie in deine Leitfäden übernommen', 'success')
+      } else {
+        const d = await res.json().catch(() => ({}))
+        showToast(d.error || 'Fehler', 'error')
+      }
+    } catch (e) {
+      showToast('Fehler beim Übernehmen', 'error')
+    }
+  }
+
+  // Stichpunkte: gespeicherte anzeigen oder per KI erzeugen und speichern
   React.useEffect(() => {
-    if (selectedGuide && viewMode === 'bullets' && selectedGuide.items && selectedGuide.items.length > 0) {
-      const convertToBulletPoints = async () => {
-        setConvertingBullets(true)
-        try {
-          const res = await apiFetch('/api/guides/convert-to-bullets', {
-            method: 'POST',
-            body: JSON.stringify({ items: selectedGuide.items })
-          })
-          
-          if (res.ok) {
-            const data = await res.json()
-            const bullets = data.bullets || []
-            setConvertedBullets(bullets.map(b => `• ${b}`))
-          } else {
-            // Fallback auf einfache Komprimierung
-            console.error('KI-Konvertierung fehlgeschlagen, verwende Fallback')
-            const fallback = selectedGuide.items.map(item => {
-              const text = item.text.trim()
-              const words = text.split(/\s+/).filter(w => w.length > 3).slice(0, 4)
-              return `• ${words.join(' ')}`
-            })
-            setConvertedBullets(fallback)
-          }
-        } catch (error) {
-          console.error('Fehler bei KI-Konvertierung:', error)
-          // Fallback auf einfache Komprimierung
+    if (!selectedGuide || viewMode !== 'bullets') {
+      setConvertedBullets([])
+      setEditingBullets(false)
+      return
+    }
+    const saved = selectedGuide.bullets
+    if (saved && Array.isArray(saved) && saved.length > 0) {
+      setConvertedBullets(saved.map(b => (typeof b === 'string' && b.startsWith('•') ? b : `• ${b || ''}`)))
+      setConvertingBullets(false)
+      return
+    }
+    if (!selectedGuide.items?.length) {
+      setConvertedBullets([])
+      setConvertingBullets(false)
+      return
+    }
+    let cancelled = false
+    setConvertingBullets(true)
+    apiFetch('/api/guides/convert-to-bullets', {
+      method: 'POST',
+      body: JSON.stringify({ items: selectedGuide.items })
+    })
+      .then(res => res.ok ? res.json() : Promise.reject(new Error('KI fehlgeschlagen')))
+      .then(async (data) => {
+        const bullets = data.bullets || []
+        const withPrefix = bullets.map(b => (b.startsWith('•') ? b : `• ${b}`))
+        if (cancelled) return
+        setConvertedBullets(withPrefix)
+        const raw = bullets.map(b => (typeof b === 'string' && b.startsWith('•') ? b.slice(1).trim() : b))
+        const patchRes = await apiFetch(`/api/guides/${selectedGuide.id}/bullets`, {
+          method: 'PATCH',
+          body: JSON.stringify({ bullets: raw })
+        })
+        if (cancelled) return
+        if (patchRes.ok) {
+          const patchData = await patchRes.json()
+          const guide = patchData.guide
+          setSelectedGuide(prev => prev?.id === guide.id ? { ...prev, bullets: guide.bullets } : prev)
+          setGuides(prev => prev.map(g => g.id === guide.id ? { ...g, bullets: guide.bullets } : g))
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
           const fallback = selectedGuide.items.map(item => {
             const text = item.text.trim()
             const words = text.split(/\s+/).filter(w => w.length > 3).slice(0, 4)
             return `• ${words.join(' ')}`
           })
           setConvertedBullets(fallback)
-        } finally {
-          setConvertingBullets(false)
         }
-      }
-      
-      convertToBulletPoints()
-    } else {
-      setConvertedBullets([])
-    }
-  }, [selectedGuide, viewMode])
-  
-  const compressUSP = (usp) => {
-    // Komprimiere USP-Titel und Beschreibung für Stichpunkte
-    const compressText = (text) => {
-      if (!text) return ''
-      let compressed = text.trim()
-      
-      // Entferne Artikel
-      compressed = compressed.replace(/\b(der|die|das|ein|eine|einen|einem|einer)\s+/gi, ' ')
-      
-      // Entferne häufige Präpositionen
-      compressed = compressed.replace(/\s+(für|von|mit|auf|in|zu|an|bei|über|unter)\s+/gi, ' ')
-      
-      // Entferne Hilfsverben
-      compressed = compressed.replace(/\s+(ist|sind|war|waren|wird|werden|hat|haben)\s+/gi, ' ')
-      
-      // Bereinige
-      compressed = compressed.replace(/\s+/g, ' ').trim()
-      
-      // Begrenze auf wichtige Keywords
-      if (compressed.length > 35) {
-        const words = compressed.split(/\s+/)
-        const important = words.filter(w => w.length > 3).slice(0, 5)
-        compressed = important.join(' ')
-      }
-      
-      return compressed
-    }
-    
-    return {
-      title: compressText(usp.title),
-      description: compressText(usp.description)
-    }
-  }
-
+      })
+      .finally(() => { if (!cancelled) setConvertingBullets(false) })
+    return () => { cancelled = true }
+  }, [selectedGuide?.id, selectedGuide?.items, selectedGuide?.bullets, viewMode])
 
   if (authLoading || loading) {
     return <div className="loading">Lade Leitfäden...</div>
@@ -5567,10 +5781,10 @@ function MeineLeitfaeden() {
       return [...standardObjections, ...objections].slice(0, 8) // Maximal 8 Einwände
     }
     
-    // Links: Alle USPs, Rechts: Einwände
+    // Links: Alle USPs, Rechts: Einwände (API = situationsbezogen zum Vorlesen, sonst Fallback)
     const leftUSPs = allUSPs
-    const objections = generateObjections(usps)
-    
+    const displayObjections = (objections && objections.length > 0) ? objections : generateObjections(usps)
+
     return (
       <div className="leitfaden-viewer-container">
         <div className="leitfaden-viewer-header">
@@ -5601,7 +5815,7 @@ function MeineLeitfaeden() {
             {leftUSPs.length > 0 ? (
               <div className="usp-sidebar-list">
                 {leftUSPs.map((usp, idx) => {
-                  const displayUSP = viewMode === 'bullets' ? compressUSP(usp) : usp
+                  const displayUSP = usp
                   const uspId = `left-${usp.category}-${usp.index}`
                   const isHovered = hoveredUSP === uspId
                   return (
@@ -5689,12 +5903,76 @@ function MeineLeitfaeden() {
                       <div className="loading-bullets">
                         <p>Konvertiere zu Stichpunkten...</p>
                       </div>
-                    ) : convertedBullets.length > 0 ? (
-                      <ul className="leitfaden-viewer-bullets">
-                        {convertedBullets.map((bullet, idx) => (
-                          <li key={idx} className="leitfaden-viewer-bullet">{bullet}</li>
-                        ))}
-                      </ul>
+                    ) : convertedBullets.length > 0 && !editingBullets ? (
+                      <>
+                        <ul className="leitfaden-viewer-bullets">
+                          {convertedBullets.map((bullet, idx) => (
+                            <li key={idx} className="leitfaden-viewer-bullet">{bullet}</li>
+                          ))}
+                        </ul>
+                        <div className="leitfaden-bullets-actions" style={{ marginTop: '1rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                          <button type="button" className="btn btn-outline btn-sm" onClick={() => { setBulletsEditText(convertedBullets.map(b => (b.startsWith('•') ? b.slice(1).trim() : b)).join('\n')); setEditingBullets(true) }}>
+                            Manuell bearbeiten
+                          </button>
+                          <button type="button" className="btn btn-outline btn-sm" onClick={async () => {
+                            setConvertingBullets(true)
+                            try {
+                              const res = await apiFetch('/api/guides/convert-to-bullets', { method: 'POST', body: JSON.stringify({ items: selectedGuide.items }) })
+                              const data = res.ok ? await res.json() : null
+                              const bullets = data?.bullets || []
+                              const raw = bullets.map(b => (b.startsWith('•') ? b.slice(1).trim() : b))
+                              const patchRes = await apiFetch(`/api/guides/${selectedGuide.id}/bullets`, { method: 'PATCH', body: JSON.stringify({ bullets: raw }) })
+                              if (patchRes.ok) {
+                                const patchData = await patchRes.json()
+                                const g = patchData.guide
+                                setConvertedBullets(bullets.map(b => (b.startsWith('•') ? b : `• ${b}`)))
+                                setSelectedGuide(prev => prev?.id === g.id ? { ...prev, bullets: g.bullets } : prev)
+                                setGuides(prev => prev.map(x => x.id === g.id ? { ...x, bullets: g.bullets } : x))
+                                showToast('Stichpunkte neu generiert und gespeichert', 'success')
+                              }
+                            } catch (e) {
+                              showToast('Fehler beim Generieren', 'error')
+                            } finally {
+                              setConvertingBullets(false)
+                            }
+                          }}>
+                            Neu mit KI generieren
+                          </button>
+                        </div>
+                      </>
+                    ) : editingBullets ? (
+                      <div>
+                        <textarea
+                          className="leitfaden-bullets-edit"
+                          value={bulletsEditText}
+                          onChange={e => setBulletsEditText(e.target.value)}
+                          rows={12}
+                          style={{ width: '100%', padding: '0.75rem', marginBottom: '0.5rem' }}
+                          placeholder="Ein Stichpunkt pro Zeile"
+                        />
+                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                          <button type="button" className="btn btn-primary btn-sm" onClick={async () => {
+                            const lines = bulletsEditText.split('\n').map(l => l.trim()).filter(Boolean).map(l => l.replace(/^•\s*/, ''))
+                            try {
+                              const patchRes = await apiFetch(`/api/guides/${selectedGuide.id}/bullets`, { method: 'PATCH', body: JSON.stringify({ bullets: lines }) })
+                              if (patchRes.ok) {
+                                const patchData = await patchRes.json()
+                                const g = patchData.guide
+                                setConvertedBullets((g.bullets || []).map(b => (b.startsWith('•') ? b : `• ${b}`)))
+                                setSelectedGuide(prev => prev?.id === g.id ? { ...prev, bullets: g.bullets } : prev)
+                                setGuides(prev => prev.map(x => x.id === g.id ? { ...x, bullets: g.bullets } : x))
+                                setEditingBullets(false)
+                                showToast('Stichpunkte gespeichert', 'success')
+                              }
+                            } catch (e) {
+                              showToast('Fehler beim Speichern', 'error')
+                            }
+                          }}>
+                            Speichern
+                          </button>
+                          <button type="button" className="btn btn-outline btn-sm" onClick={() => setEditingBullets(false)}>Abbrechen</button>
+                        </div>
+                      </div>
                     ) : (
                       <ul className="leitfaden-viewer-bullets">
                         {selectedGuide.items.map((item, idx) => {
@@ -5714,9 +5992,11 @@ function MeineLeitfaeden() {
           {/* Rechte Sidebar: Einwände */}
           <div className="leitfaden-viewer-sidebar leitfaden-viewer-sidebar-right">
             <h3>Mögliche Einwände</h3>
-            {objections.length > 0 ? (
+            {loadingObjections ? (
+              <p className="usp-sidebar-empty">Einwände werden generiert…</p>
+            ) : displayObjections.length > 0 ? (
               <div className="usp-sidebar-list">
-                {objections.map((objection, idx) => {
+                {displayObjections.map((objection, idx) => {
                   const objectionId = `objection-${idx}`
                   const isHovered = hoveredUSP === objectionId
                   return (
@@ -5835,6 +6115,254 @@ function MeineLeitfaeden() {
               )}
             </div>
           ))}
+        </div>
+      )}
+      {isThomasBoeke && (
+        <div className="content-section" style={{ marginTop: '2rem' }}>
+          <h3>Geteilte Leitfäden (Intern)</h3>
+          <p>Leitfäden, die von Kollegen mit @thomas-boeke.com geteilt wurden. Kopie übernimmt den Leitfaden in deine Liste.</p>
+          {loadingSharedGuides ? (
+            <p>Lade …</p>
+          ) : sharedGuides.length === 0 ? (
+            <p style={{ color: '#666' }}>Keine geteilten Leitfäden.</p>
+          ) : (
+            <ul style={{ listStyle: 'none', padding: 0 }}>
+              {sharedGuides.map(g => (
+                <li key={g.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.75rem 0', borderBottom: '1px solid #eee' }}>
+                  <span><strong>{g.title}</strong></span>
+                  <button type="button" className="btn btn-primary btn-sm" onClick={() => handleCopySharedGuideToMe(g)}>Kopie zu mir</button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function InternSharedPage() {
+  const { user, setShowAuthModal } = useAuth()
+  const showToast = useToast()
+  const [formulations, setFormulations] = React.useState([])
+  const [sharedGuides, setSharedGuides] = React.useState([])
+  const [myGuides, setMyGuides] = React.useState([])
+  const [loadingFormulations, setLoadingFormulations] = React.useState(true)
+  const [loadingGuides, setLoadingGuides] = React.useState(true)
+  const [loadingMyGuides, setLoadingMyGuides] = React.useState(true)
+  const [activeTab, setActiveTab] = React.useState('formulations')
+  const [newChapterId, setNewChapterId] = React.useState('begruessung')
+  const [newFormulationText, setNewFormulationText] = React.useState('')
+  const [shareGuideId, setShareGuideId] = React.useState('')
+
+  const isThomasBoeke = user?.email?.toLowerCase().endsWith('@thomas-boeke.com')
+
+  const loadFormulations = React.useCallback(() => {
+    if (!isThomasBoeke) return
+    setLoadingFormulations(true)
+    apiFetch('/api/shared/formulations')
+      .then(r => r.ok ? r.json() : { formulations: [] })
+      .then(data => { setFormulations(data.formulations || []); setLoadingFormulations(false) })
+      .catch(() => { setFormulations([]); setLoadingFormulations(false) })
+  }, [isThomasBoeke])
+
+  const loadSharedGuides = React.useCallback(() => {
+    if (!isThomasBoeke) return
+    setLoadingGuides(true)
+    apiFetch('/api/shared/guides')
+      .then(r => r.ok ? r.json() : { guides: [] })
+      .then(data => { setSharedGuides(data.guides || []); setLoadingGuides(false) })
+      .catch(() => { setSharedGuides([]); setLoadingGuides(false) })
+  }, [isThomasBoeke])
+
+  const loadMyGuides = React.useCallback(() => {
+    if (!user) return
+    setLoadingMyGuides(true)
+    apiFetch('/api/guides/me')
+      .then(r => r.ok ? r.json() : { guides: [] })
+      .then(data => { setMyGuides(data.guides || []); setLoadingMyGuides(false) })
+      .catch(() => { setMyGuides([]); setLoadingMyGuides(false) })
+  }, [user])
+
+  React.useEffect(() => {
+    if (!user) {
+      setLoadingFormulations(false)
+      setLoadingGuides(false)
+      setLoadingMyGuides(false)
+      return
+    }
+    if (isThomasBoeke) {
+      loadFormulations()
+      loadSharedGuides()
+    }
+    loadMyGuides()
+  }, [user, isThomasBoeke, loadFormulations, loadSharedGuides, loadMyGuides])
+
+  const handleAddFormulation = async () => {
+    if (!newFormulationText.trim()) return
+    try {
+      const res = await apiFetch('/api/shared/formulations', {
+        method: 'POST',
+        body: JSON.stringify({ chapter_id: newChapterId, text: newFormulationText.trim() })
+      })
+      if (res.ok) {
+        setNewFormulationText('')
+        loadFormulations()
+        showToast('Formulierung hinzugefügt', 'success')
+      } else {
+        const d = await res.json().catch(() => ({}))
+        showToast(d.error || 'Fehler', 'error')
+      }
+    } catch (e) {
+      showToast('Fehler beim Speichern', 'error')
+    }
+  }
+
+  const handleDeleteFormulation = async (id) => {
+    try {
+      const res = await apiFetch(`/api/shared/formulations/${id}`, { method: 'DELETE' })
+      if (res.ok) {
+        loadFormulations()
+        showToast('Formulierung gelöscht', 'success')
+      } else showToast('Löschen fehlgeschlagen', 'error')
+    } catch (e) {
+      showToast('Fehler beim Löschen', 'error')
+    }
+  }
+
+  const handleShareGuide = async () => {
+    if (!shareGuideId) return
+    try {
+      const res = await apiFetch('/api/shared/guides', {
+        method: 'POST',
+        body: JSON.stringify({ guideId: Number(shareGuideId) })
+      })
+      if (res.ok) {
+        setShareGuideId('')
+        loadSharedGuides()
+        showToast('Leitfaden geteilt', 'success')
+      } else {
+        const d = await res.json().catch(() => ({}))
+        showToast(d.error || 'Fehler', 'error')
+      }
+    } catch (e) {
+      showToast('Fehler beim Teilen', 'error')
+    }
+  }
+
+  const handleCopyGuideToMe = async (guide) => {
+    try {
+      const res = await apiFetch('/api/guides', {
+        method: 'POST',
+        body: JSON.stringify({
+          title: guide.title,
+          items: guide.items || [],
+          usps: guide.usps || null,
+          bullets: guide.bullets || null
+        })
+      })
+      if (res.ok) {
+        showToast('Kopie in deine Leitfäden übernommen', 'success')
+        loadMyGuides()
+      } else {
+        const d = await res.json().catch(() => ({}))
+        showToast(d.error || 'Fehler', 'error')
+      }
+    } catch (e) {
+      showToast('Fehler beim Übernehmen', 'error')
+    }
+  }
+
+  if (!user) {
+    return (
+      <div className="page-container">
+        <div className="section-header">
+          <h2>Intern</h2>
+          <p>Bitte melde dich an.</p>
+          <button type="button" className="btn" onClick={() => setShowAuthModal(true)}>Anmelden</button>
+        </div>
+      </div>
+    )
+  }
+
+  if (!isThomasBoeke) {
+    return (
+      <div className="page-container">
+        <div className="section-header">
+          <h2>Intern</h2>
+          <p>Nur für Firmen-Accounts (@thomas-boeke.com).</p>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="page-container">
+      <div className="section-header">
+        <h2>Intern</h2>
+        <p>Gemeinsame Formulierungen und geteilte Leitfäden für @thomas-boeke.com.</p>
+      </div>
+      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem' }}>
+        <button type="button" className={`btn ${activeTab === 'formulations' ? 'btn-primary' : 'btn-outline'}`} onClick={() => setActiveTab('formulations')}>Formulierungen</button>
+        <button type="button" className={`btn ${activeTab === 'guides' ? 'btn-primary' : 'btn-outline'}`} onClick={() => setActiveTab('guides')}>Leitfäden</button>
+      </div>
+
+      {activeTab === 'formulations' && (
+        <div className="content-section" style={{ marginBottom: '2rem' }}>
+          <h3>Geteilte Formulierungen</h3>
+          <p>Diese erscheinen im Leitfaden-Generator als zusätzliche Vorschläge.</p>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', alignItems: 'flex-end', marginBottom: '1rem' }}>
+            <label>
+              <span style={{ marginRight: '0.5rem' }}>Kapitel:</span>
+              <select value={newChapterId} onChange={e => setNewChapterId(e.target.value)} style={{ padding: '0.35rem' }}>
+                {LEITFADEN_KAPITEL.map(k => (
+                  <option key={k.id} value={k.id}>{k.title}</option>
+                ))}
+              </select>
+            </label>
+            <input type="text" value={newFormulationText} onChange={e => setNewFormulationText(e.target.value)} placeholder="Neue Formulierung …" className="leitfaden-input" style={{ flex: '1', minWidth: '200px' }} onKeyDown={e => e.key === 'Enter' && handleAddFormulation()} />
+            <button type="button" className="btn" onClick={handleAddFormulation}>Hinzufügen</button>
+          </div>
+          {loadingFormulations ? <p>Lade …</p> : (
+            <ul style={{ listStyle: 'none', padding: 0 }}>
+              {formulations.map(f => (
+                <li key={f.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.5rem 0', borderBottom: '1px solid #eee' }}>
+                  <span><strong>{LEITFADEN_CHAPTER_TITLES[f.chapter_id] || f.chapter_id}:</strong> {f.text}</span>
+                  {String(f.created_by) === String(user?.id) && (
+                    <button type="button" className="btn btn-outline btn-sm" onClick={() => handleDeleteFormulation(f.id)} aria-label="Löschen">Löschen</button>
+                  )}
+                </li>
+              ))}
+              {formulations.length === 0 && <li style={{ color: '#666' }}>Noch keine geteilten Formulierungen.</li>}
+            </ul>
+          )}
+        </div>
+      )}
+
+      {activeTab === 'guides' && (
+        <div className="content-section">
+          <h3>Leitfaden teilen</h3>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', alignItems: 'center', marginBottom: '1.5rem' }}>
+            <select value={shareGuideId} onChange={e => setShareGuideId(e.target.value)} style={{ padding: '0.35rem', minWidth: '200px' }}>
+              <option value="">— Leitfaden wählen —</option>
+              {myGuides.map(g => (
+                <option key={g.id} value={g.id}>{g.title}</option>
+              ))}
+            </select>
+            <button type="button" className="btn" onClick={handleShareGuide} disabled={!shareGuideId}>Teilen</button>
+          </div>
+          <h3>Geteilte Leitfäden</h3>
+          {loadingGuides ? <p>Lade …</p> : (
+            <ul style={{ listStyle: 'none', padding: 0 }}>
+              {sharedGuides.map(g => (
+                <li key={g.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.75rem 0', borderBottom: '1px solid #eee' }}>
+                  <span><strong>{g.title}</strong></span>
+                  <button type="button" className="btn btn-primary btn-sm" onClick={() => handleCopyGuideToMe(g)}>Kopie in meine Leitfäden</button>
+                </li>
+              ))}
+              {sharedGuides.length === 0 && <li style={{ color: '#666' }}>Noch keine geteilten Leitfäden.</li>}
+            </ul>
+          )}
         </div>
       )}
     </div>
@@ -6212,6 +6740,7 @@ export default function App() {
           <Route path="/practice" element={<Practice />} />
           <Route path="/scenarios" element={<Scenarios />} />
           <Route path="/progress" element={<Progress />} />
+          <Route path="/intern" element={<InternSharedPage />} />
           <Route path="/leitfaden" element={<LeitfadenOverview />} />
           <Route path="/leitfaden/generator" element={<LeitfadenGenerator />} />
           <Route path="/leitfaden/meine" element={<MeineLeitfaeden />} />

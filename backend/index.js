@@ -138,15 +138,44 @@ async function initializeDatabase() {
         title VARCHAR(255) NOT NULL,
         items JSONB NOT NULL,
         usps JSONB,
+        bullets JSONB,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `;
-    
+    await sql`ALTER TABLE user_guides ADD COLUMN IF NOT EXISTS bullets JSONB`;
+
+    await sql`
+      CREATE TABLE IF NOT EXISTS shared_formulations (
+        id SERIAL PRIMARY KEY,
+        chapter_id VARCHAR(100) NOT NULL,
+        text TEXT NOT NULL,
+        created_by VARCHAR(255) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `;
+    await sql`
+      CREATE TABLE IF NOT EXISTS shared_guides (
+        id SERIAL PRIMARY KEY,
+        title VARCHAR(255) NOT NULL,
+        items JSONB NOT NULL,
+        usps JSONB,
+        bullets JSONB,
+        shared_by VARCHAR(255) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `;
     console.log('Database tables initialized successfully');
   } catch (error) {
     console.log('Database initialization failed:', error.message);
   }
+}
+
+const VALID_LEITFADEN_CHAPTER_IDS = ['begruessung', 'einstieg', 'fragen', 'pitch', 'einwaende', 'abschluss', 'verabschiedung'];
+function isThomasBoekeUser(req) {
+  const email = req.session?.user?.email;
+  if (!email || typeof email !== 'string') return false;
+  return email.trim().toLowerCase().endsWith('@thomas-boeke.com');
 }
 
 // Database connection (using Neon)
@@ -1877,7 +1906,7 @@ app.get('/api/guides/me', async (req, res) => {
       return res.json({ guides: [] });
     }
     const guides = await sql`
-      SELECT id, title, items, usps, created_at, updated_at
+      SELECT id, title, items, usps, bullets, created_at, updated_at
       FROM user_guides
       WHERE user_id = ${String(userId)}
       ORDER BY updated_at DESC
@@ -1887,6 +1916,7 @@ app.get('/api/guides/me', async (req, res) => {
       title: g.title,
       items: g.items,
       usps: g.usps,
+      bullets: g.bullets,
       createdAt: g.created_at,
       updatedAt: g.updated_at
     })) });
@@ -1905,14 +1935,14 @@ app.post('/api/guides', async (req, res) => {
     if (!sql) {
       return res.status(503).json({ error: 'Datenbank nicht verfügbar' });
     }
-    const { title, items, usps } = req.body;
+    const { title, items, usps, bullets } = req.body;
     if (!title || !items || !Array.isArray(items)) {
       return res.status(400).json({ error: 'Titel und Items sind erforderlich' });
     }
     const result = await sql`
-      INSERT INTO user_guides (user_id, title, items, usps)
-      VALUES (${String(userId)}, ${title}, ${JSON.stringify(items)}, ${usps ? JSON.stringify(usps) : null})
-      RETURNING id, title, items, usps, created_at, updated_at
+      INSERT INTO user_guides (user_id, title, items, usps, bullets)
+      VALUES (${String(userId)}, ${title}, ${JSON.stringify(items)}, ${usps ? JSON.stringify(usps) : null}, ${bullets && Array.isArray(bullets) ? JSON.stringify(bullets) : null})
+      RETURNING id, title, items, usps, bullets, created_at, updated_at
     `;
     res.json({ 
       success: true, 
@@ -1921,6 +1951,7 @@ app.post('/api/guides', async (req, res) => {
         title: result[0].title,
         items: result[0].items,
         usps: result[0].usps,
+        bullets: result[0].bullets,
         createdAt: result[0].created_at,
         updatedAt: result[0].updated_at
       }
@@ -1961,7 +1992,7 @@ app.put('/api/guides/:id', async (req, res) => {
       UPDATE user_guides
       SET title = ${title}, items = ${JSON.stringify(items)}, usps = ${usps ? JSON.stringify(usps) : null}, updated_at = CURRENT_TIMESTAMP
       WHERE id = ${guideId} AND user_id = ${String(userId)}
-      RETURNING id, title, items, usps, created_at, updated_at
+      RETURNING id, title, items, usps, bullets, created_at, updated_at
     `;
     if (result.length === 0) {
       return res.status(404).json({ error: 'Leitfaden nicht gefunden' });
@@ -1973,6 +2004,7 @@ app.put('/api/guides/:id', async (req, res) => {
         title: result[0].title,
         items: result[0].items,
         usps: result[0].usps,
+        bullets: result[0].bullets,
         createdAt: result[0].created_at,
         updatedAt: result[0].updated_at
       }
@@ -1980,6 +2012,41 @@ app.put('/api/guides/:id', async (req, res) => {
   } catch (error) {
     console.error('Error updating guide:', error);
     res.status(500).json({ error: 'Fehler beim Aktualisieren des Leitfadens' });
+  }
+});
+
+app.patch('/api/guides/:id/bullets', async (req, res) => {
+  try {
+    const userId = req.session?.user?.id;
+    if (!userId) return res.status(401).json({ error: 'Nicht angemeldet' });
+    if (!sql) return res.status(503).json({ error: 'Datenbank nicht verfügbar' });
+    const guideId = parseInt(req.params.id, 10);
+    if (Number.isNaN(guideId)) return res.status(400).json({ error: 'Ungültige Leitfaden-ID' });
+    const { bullets } = req.body;
+    if (!Array.isArray(bullets)) return res.status(400).json({ error: 'bullets muss ein Array sein' });
+    const existing = await sql`SELECT user_id FROM user_guides WHERE id = ${guideId}`;
+    if (!existing?.length) return res.status(404).json({ error: 'Leitfaden nicht gefunden' });
+    if (existing[0].user_id !== String(userId)) return res.status(403).json({ error: 'Keine Berechtigung' });
+    const result = await sql`
+      UPDATE user_guides SET bullets = ${JSON.stringify(bullets)}, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ${guideId} AND user_id = ${String(userId)}
+      RETURNING id, title, items, usps, bullets, created_at, updated_at
+    `;
+    res.json({
+      success: true,
+      guide: {
+        id: result[0].id,
+        title: result[0].title,
+        items: result[0].items,
+        usps: result[0].usps,
+        bullets: result[0].bullets,
+        createdAt: result[0].created_at,
+        updatedAt: result[0].updated_at
+      }
+    });
+  } catch (error) {
+    console.error('Error updating guide bullets:', error);
+    res.status(500).json({ error: 'Fehler beim Speichern der Stichpunkte' });
   }
 });
 
@@ -2008,6 +2075,137 @@ app.delete('/api/guides/:id', async (req, res) => {
   } catch (error) {
     console.error('Error deleting guide:', error);
     res.status(500).json({ error: 'Fehler beim Löschen des Leitfadens' });
+  }
+});
+
+// --- Shared (Intern) API: nur @thomas-boeke.com ---
+app.get('/api/shared/formulations', async (req, res) => {
+  try {
+    const userId = req.session?.user?.id;
+    if (!userId) return res.status(401).json({ error: 'Nicht angemeldet' });
+    if (!isThomasBoekeUser(req)) return res.status(403).json({ error: 'Nur für Firmen-Accounts (@thomas-boeke.com)' });
+    if (!sql) return res.status(503).json({ error: 'Datenbank nicht verfügbar' });
+    const chapterId = req.query.chapter_id;
+    let rows;
+    if (chapterId) {
+      rows = await sql`SELECT id, chapter_id, text, created_by, created_at FROM shared_formulations WHERE chapter_id = ${chapterId} ORDER BY created_at DESC`;
+    } else {
+      rows = await sql`SELECT id, chapter_id, text, created_by, created_at FROM shared_formulations ORDER BY chapter_id, created_at DESC`;
+    }
+    res.json({ formulations: rows });
+  } catch (error) {
+    console.error('Error fetching shared formulations:', error);
+    res.status(500).json({ error: 'Fehler beim Laden der Formulierungen' });
+  }
+});
+
+app.post('/api/shared/formulations', async (req, res) => {
+  try {
+    const userId = req.session?.user?.id;
+    if (!userId) return res.status(401).json({ error: 'Nicht angemeldet' });
+    if (!isThomasBoekeUser(req)) return res.status(403).json({ error: 'Nur für Firmen-Accounts (@thomas-boeke.com)' });
+    if (!sql) return res.status(503).json({ error: 'Datenbank nicht verfügbar' });
+    const { chapter_id, text } = req.body || {};
+    if (!chapter_id || !VALID_LEITFADEN_CHAPTER_IDS.includes(chapter_id)) {
+      return res.status(400).json({ error: 'Ungültiges chapter_id' });
+    }
+    if (!text || typeof text !== 'string' || !text.trim()) {
+      return res.status(400).json({ error: 'Text ist erforderlich' });
+    }
+    const result = await sql`
+      INSERT INTO shared_formulations (chapter_id, text, created_by)
+      VALUES (${chapter_id}, ${text.trim()}, ${String(userId)})
+      RETURNING id, chapter_id, text, created_by, created_at
+    `;
+    res.status(201).json(result[0]);
+  } catch (error) {
+    console.error('Error creating shared formulation:', error);
+    res.status(500).json({ error: 'Fehler beim Speichern' });
+  }
+});
+
+app.delete('/api/shared/formulations/:id', async (req, res) => {
+  try {
+    const userId = req.session?.user?.id;
+    if (!userId) return res.status(401).json({ error: 'Nicht angemeldet' });
+    if (!isThomasBoekeUser(req)) return res.status(403).json({ error: 'Nur für Firmen-Accounts (@thomas-boeke.com)' });
+    if (!sql) return res.status(503).json({ error: 'Datenbank nicht verfügbar' });
+    const id = parseInt(req.params.id, 10);
+    if (Number.isNaN(id)) return res.status(400).json({ error: 'Ungültige ID' });
+    const result = await sql`
+      DELETE FROM shared_formulations WHERE id = ${id} AND created_by = ${String(userId)} RETURNING id
+    `;
+    if (result.length === 0) return res.status(404).json({ error: 'Nicht gefunden oder keine Berechtigung' });
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting shared formulation:', error);
+    res.status(500).json({ error: 'Fehler beim Löschen' });
+  }
+});
+
+app.get('/api/shared/guides', async (req, res) => {
+  try {
+    const userId = req.session?.user?.id;
+    if (!userId) return res.status(401).json({ error: 'Nicht angemeldet' });
+    if (!isThomasBoekeUser(req)) return res.status(403).json({ error: 'Nur für Firmen-Accounts (@thomas-boeke.com)' });
+    if (!sql) return res.status(503).json({ error: 'Datenbank nicht verfügbar' });
+    const rows = await sql`
+      SELECT id, title, items, usps, bullets, shared_by, created_at FROM shared_guides ORDER BY created_at DESC
+    `;
+    res.json({ guides: rows });
+  } catch (error) {
+    console.error('Error fetching shared guides:', error);
+    res.status(500).json({ error: 'Fehler beim Laden der Leitfäden' });
+  }
+});
+
+app.post('/api/shared/guides', async (req, res) => {
+  try {
+    const userId = req.session?.user?.id;
+    if (!userId) return res.status(401).json({ error: 'Nicht angemeldet' });
+    if (!isThomasBoekeUser(req)) return res.status(403).json({ error: 'Nur für Firmen-Accounts (@thomas-boeke.com)' });
+    if (!sql) return res.status(503).json({ error: 'Datenbank nicht verfügbar' });
+    const { guideId, title, items, usps, bullets } = req.body || {};
+    let payload;
+    if (guideId != null) {
+      const existing = await sql`
+        SELECT id, title, items, usps, bullets FROM user_guides WHERE id = ${Number(guideId)} AND user_id = ${String(userId)}
+      `;
+      if (!existing?.length) return res.status(404).json({ error: 'Leitfaden nicht gefunden' });
+      payload = { title: existing[0].title, items: existing[0].items, usps: existing[0].usps, bullets: existing[0].bullets };
+    } else if (title && items && Array.isArray(items)) {
+      payload = { title, items, usps: usps || null, bullets: bullets || null };
+    } else {
+      return res.status(400).json({ error: 'guideId oder title+items erforderlich' });
+    }
+    const result = await sql`
+      INSERT INTO shared_guides (title, items, usps, bullets, shared_by)
+      VALUES (${payload.title}, ${JSON.stringify(payload.items)}, ${payload.usps ? JSON.stringify(payload.usps) : null}, ${payload.bullets ? JSON.stringify(payload.bullets) : null}, ${String(userId)})
+      RETURNING id, title, items, usps, bullets, shared_by, created_at
+    `;
+    res.status(201).json(result[0]);
+  } catch (error) {
+    console.error('Error creating shared guide:', error);
+    res.status(500).json({ error: 'Fehler beim Teilen' });
+  }
+});
+
+app.delete('/api/shared/guides/:id', async (req, res) => {
+  try {
+    const userId = req.session?.user?.id;
+    if (!userId) return res.status(401).json({ error: 'Nicht angemeldet' });
+    if (!isThomasBoekeUser(req)) return res.status(403).json({ error: 'Nur für Firmen-Accounts (@thomas-boeke.com)' });
+    if (!sql) return res.status(503).json({ error: 'Datenbank nicht verfügbar' });
+    const id = parseInt(req.params.id, 10);
+    if (Number.isNaN(id)) return res.status(400).json({ error: 'Ungültige ID' });
+    const result = await sql`
+      DELETE FROM shared_guides WHERE id = ${id} AND shared_by = ${String(userId)} RETURNING id
+    `;
+    if (result.length === 0) return res.status(404).json({ error: 'Nicht gefunden oder keine Berechtigung' });
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting shared guide:', error);
+    res.status(500).json({ error: 'Fehler beim Löschen' });
   }
 });
 
@@ -2069,11 +2267,10 @@ async function extractUSPsFromWebsite(websiteUrl, customInstructions = null) {
     }
     
     userPrompt += `Gib die USPs als JSON-Objekt zurück im Format:\n{\n  "grundsaetzlich": [{"title": "USP Titel", "description": "Beschreibung"}, ...],\n  "gegenueberKonkurrenten": [{"title": "USP Titel", "description": "Beschreibung"}, ...],\n  "gegenueberAlterenMethoden": [{"title": "USP Titel", "description": "Beschreibung"}, ...]\n}\n\n`;
-    
+    userPrompt += `Qualität der USPs (besonders für „mögliche Einwände“ im Leitfaden): Formuliere jeden USP als direktes Verkaufsargument – klarer Nutzen für den Kunden, konkret und nachvollziehbar. Keine vagen Floskeln oder reinen Feature-Aufzählungen. Regeln: (1) Nur Aussagen übernehmen, die der Website-Text enthält. (2) Keine Schlussfolgerungen oder „naheliegenden“ Zusatzargumente. (3) Jeder USP muss konkret und verkaufsrelevant formuliert sein (Nutzen, nicht nur Beschreibung).\n\n`;
     if (customInstructions && customInstructions.trim()) {
       userPrompt += `WICHTIG: Berücksichtige bei der Extraktion die oben genannten Anweisungen. Extrahiere NUR USPs, die zu den Anweisungen passen. Ignoriere alle anderen Inhalte.\n\n`;
     }
-    
     userPrompt += `Analysiere den Inhalt sorgfältig und ordne die USPs den passenden Kategorien zu. Wenn eine Kategorie nicht zutrifft, gib ein leeres Array zurück.`;
     
     console.log('Calling Groq API...');
@@ -2082,9 +2279,10 @@ async function extractUSPsFromWebsite(websiteUrl, customInstructions = null) {
       console.log('User prompt preview:', userPrompt.substring(0, 300) + '...');
     }
     
+    const systemRules = ' Formuliere jeden USP als direktes Verkaufsargument: klarer Nutzen für den Kunden, konkret und nachvollziehbar. Keine vagen Floskeln oder reinen Feature-Aufzählungen. Regeln: (1) Nur Aussagen übernehmen, die der Website-Text enthält. (2) Keine Schlussfolgerungen oder „naheliegenden“ Zusatzargumente. (3) Jeder USP muss konkret und verkaufsrelevant formuliert sein (Nutzen, nicht nur Beschreibung). Die USPs werden u.a. für „mögliche Einwände“ im Verkaufsleitfaden genutzt – sie müssen als direkte Verkaufs- und Einwand-Argumente verwendbar sein.';
     const systemPrompt = customInstructions && customInstructions.trim()
-      ? 'Du bist ein Experte für Verkaufsargumente. Analysiere eine Unternehmenswebsite und extrahiere Unique Selling Points (USPs) in drei Kategorien: 1) Grundsätzliche USPs (allgemeine Alleinstellungsmerkmale), 2) USPs gegenüber ähnlichen Konkurrenten (Differenzierung), 3) USPs gegenüber älteren Methoden (Innovation/Modernisierung). WICHTIG: Wenn der Nutzer spezifische Anweisungen gibt, befolge diese GENAU und extrahiere NUR die USPs, die zu diesen Anweisungen passen. Ignoriere alle anderen Inhalte, die nicht zu den Anweisungen passen. Gib die USPs als strukturiertes JSON-Objekt zurück.'
-      : 'Du bist ein Experte für Verkaufsargumente. Analysiere eine Unternehmenswebsite und extrahiere Unique Selling Points (USPs) in drei Kategorien: 1) Grundsätzliche USPs (allgemeine Alleinstellungsmerkmale), 2) USPs gegenüber ähnlichen Konkurrenten (Differenzierung), 3) USPs gegenüber älteren Methoden (Innovation/Modernisierung). Gib die USPs als strukturiertes JSON-Objekt zurück.';
+      ? 'Du bist ein Experte für Verkaufsargumente. Analysiere eine Unternehmenswebsite und extrahiere Unique Selling Points (USPs) in drei Kategorien: 1) Grundsätzliche USPs (allgemeine Alleinstellungsmerkmale), 2) USPs gegenüber ähnlichen Konkurrenten (Differenzierung), 3) USPs gegenüber älteren Methoden (Innovation/Modernisierung). WICHTIG: Wenn der Nutzer spezifische Anweisungen gibt, befolge diese GENAU und extrahiere NUR die USPs, die zu diesen Anweisungen passen. Ignoriere alle anderen Inhalte, die nicht zu den Anweisungen passen.' + systemRules + ' Gib die USPs als strukturiertes JSON-Objekt zurück.'
+      : 'Du bist ein Experte für Verkaufsargumente. Analysiere eine Unternehmenswebsite und extrahiere Unique Selling Points (USPs) in drei Kategorien: 1) Grundsätzliche USPs (allgemeine Alleinstellungsmerkmale), 2) USPs gegenüber ähnlichen Konkurrenten (Differenzierung), 3) USPs gegenüber älteren Methoden (Innovation/Modernisierung).' + systemRules + ' Gib die USPs als strukturiertes JSON-Objekt zurück.';
     
     const groqResponse = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
@@ -2197,6 +2395,81 @@ async function extractUSPsFromWebsite(websiteUrl, customInstructions = null) {
     console.error('Error stack:', error.stack);
     throw error;
   }
+}
+
+// Einwand-Antworten situationsbezogen generieren (zum Vorlesen im Verkaufsgespräch)
+// Darf USPs interpretieren und anpassen – muss nicht wörtlich von der Website stammen.
+async function generateObjectionResponses(usps) {
+  const groqApiKey = process.env.GROQ_API_KEY;
+  if (!groqApiKey) {
+    throw new Error('GROQ_API_KEY nicht gesetzt');
+  }
+  const grundsaetzlich = usps.grundsaetzlich || [];
+  const gegenueberKonkurrenten = usps.gegenueberKonkurrenten || [];
+  const gegenueberAlterenMethoden = usps.gegenueberAlterenMethoden || [];
+  const uspsText = JSON.stringify({
+    grundsaetzlich: grundsaetzlich.map(u => ({ title: u.title, description: u.description })),
+    gegenueberKonkurrenten: gegenueberKonkurrenten.map(u => ({ title: u.title, description: u.description })),
+    gegenueberAlterenMethoden: gegenueberAlterenMethoden.map(u => ({ title: u.title, description: u.description }))
+  }, null, 2);
+
+  const systemPrompt = `Du bist ein Verkaufscoach. Deine Aufgabe: Zu gegebenen USPs (Unique Selling Points) generierst du "mögliche Einwände" mit Antworten für einen Gesprächsleitfaden.
+
+WICHTIG:
+- Die ANTWORTEN sind zum direkten Vorlesen im Verkaufsgespräch gedacht. Formuliere sie gesprochen, konkret und zur jeweiligen Einwand-Situation passend.
+- Du DARFST die USPs interpretieren und situationsbezogen zuspitzen – die Antwort muss NICHT wörtlich vom Website-Text stammen, sondern perfekt zum Einwand passen (z.B. bei "zu teuer" eine echte Preis-/ROI-Antwort, bei "keine Zeit" eine echte Zeitersparnis-Formulierung).
+- Jede Antwort: 2–4 Sätze, Du- bzw. Sie-Form, so dass der Verkäufer sie 1:1 sagen kann. Keine vagen Floskeln.
+
+Beispiele für die Art der Formulierung (nur Stil, Inhalt kommt aus den USPs):
+- Einwand "Das ist mir zu teuer" → Antwort z.B.: "Verstehe ich. Wenn Sie die monatliche Ersparnis durch [konkret aus USP] gegenüber Ihrer jetzigen Lösung rechnen, trägt sich das oft in X Monaten. Soll ich das kurz durchrechnen?"
+- Einwand "Ich habe keine Zeit" → Antwort z.B.: "Darum geht es ja genau: Mit [Lösung aus USP] sparen Sie ab dem ersten Tag Zeit, weil [konkret]. Viele Kunden berichten, dass sie nach zwei Wochen bereits X Stunden pro Woche gewinnen."
+- Einwand "Die Konkurrenz ist günstiger" → Antwort z.B.: "Der Unterschied ist [konkreter Nutzen aus USPs], nicht nur der Listenpreis. Bei uns ist [z.B. Support/Updates] inklusive – da sind andere oft erst im Nachhinein teurer."
+- Einwand "Wir haben das schon anders gelöst" → Antwort z.B.: "Verstehe ich. Der Vorteil unserer Lösung in dem Fall: [konkret aus USPs gegenüber älteren Methoden]. Das bringt Ihnen [messbarer Nutzen], ohne dass Sie alles umwerfen müssen."`;
+
+  const userPrompt = `Gegeben sind folgende USPs eines Unternehmens (aus einer Website extrahiert):
+
+${uspsText}
+
+Erzeuge genau ein JSON-Objekt mit dem Schlüssel "objections" und einem Array von Objekten. Jedes Objekt hat:
+- "title": kurzer Einwand (z.B. "Das ist mir zu teuer", "Ich habe keine Zeit", "Ich kenne Ihre Firma nicht", "Die Konkurrenz ist günstiger", "Wir haben das schon anders gelöst", "Ich muss das erst mit meinem Team besprechen"). Nutze diese oder sehr ähnliche, passende Einwände.
+- "response": die Antwort zum Vorlesen (2–4 Sätze, Sie-Form, konkret zur Situation, auf Basis der USPs interpretiert – nicht einfach USP abschreiben).
+
+Mindestens 5, maximal 8 Einträge. Gib NUR das JSON zurück, ohne Erklärung.`;
+
+  const groqResponse = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${groqApiKey}`
+    },
+    body: JSON.stringify({
+      model: 'llama-3.1-8b-instant',
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt }
+      ],
+      temperature: 0.6,
+      max_tokens: 2500
+    })
+  });
+
+  if (!groqResponse.ok) {
+    const err = await groqResponse.json().catch(() => ({}));
+    throw new Error(`Groq API Fehler: ${err.error?.message || groqResponse.statusText}`);
+  }
+
+  const data = await groqResponse.json();
+  const content = data.choices?.[0]?.message?.content;
+  if (!content) throw new Error('Keine Antwort von Groq erhalten');
+
+  const jsonMatch = content.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) throw new Error('Kein JSON in der Antwort gefunden');
+  const parsed = JSON.parse(jsonMatch[0]);
+  const list = Array.isArray(parsed.objections) ? parsed.objections : parsed;
+  const objections = (Array.isArray(list) ? list : []).slice(0, 8)
+    .filter(o => o && (o.title || o.response))
+    .map(o => ({ title: o.title || 'Einwand', response: o.response || '' }));
+  return objections;
 }
 
 // Challenge-Bewertung mit KI
@@ -2556,15 +2829,15 @@ app.post('/api/guides/convert-to-bullets', async (req, res) => {
         messages: [
           {
             role: 'system',
-            content: 'Du bist ein Experte für kompakte Verkaufsformulierungen. Konvertiere Verkaufssätze in extrem kompakte Stichpunkte, die nur die wichtigsten Keywords enthalten. Der Sinn muss erhalten bleiben, aber verwende so wenig Wörter wie möglich. Entferne alle Füllwörter, Höflichkeitsfloskeln und überflüssige Artikel.'
+            content: 'Du bist ein Experte für Stichpunkt-Formulierungen. Deine Aufgabe: Vollständigen Verkaufstext in echte Stichpunkte umwandeln – stichpunktartig gekürzt, aber inhaltlich vollständig.\n\nRegeln: (1) Der gesamte Inhalt muss erhalten bleiben – keine Gedanken, Schritte oder Abläufe weglassen. (2) Nur sprachlich kürzen: Füllwörter, überflüssige Artikel, Wiederholungen und Höflichkeitsfloskeln raus; Formulierung stichpunktartig (kurz, telegrammstil). (3) Wichtige Abläufe und Reihenfolgen müssen vollständig abgebildet sein – wenn der Originaltext mehrere Schritte enthält, gibt es entsprechend mehrere Stichpunkte. (4) Jeder Stichpunkt = eine klare Aussage oder ein Schritt, so kurz wie möglich formuliert, aber ohne Informationsverlust.'
           },
           {
             role: 'user',
-            content: `Konvertiere folgende Verkaufssätze in extrem kompakte Stichpunkte (nur Keywords, Sinn erhalten):\n\n${fullText}\n\nGib die Stichpunkte als JSON-Array zurück im Format: ["Stichpunkt 1", "Stichpunkt 2", ...]\n\nJeder Stichpunkt sollte maximal 4-6 Wörter enthalten und nur die Kernaussage transportieren.`
+            content: `Wandle den folgenden Verkaufstext in Stichpunkte um. WICHTIG: Inhaltlich alles erhalten – nichts weglassen oder zusammenfassen, was Information oder Ablauf ist. Nur Wörter kürzen (stichpunktartig formulieren). Bei mehreren Schritten/Abläufen pro Satz mehrere Stichpunkte erzeugen.\n\nOriginaltext:\n\n${fullText}\n\nGib die Stichpunkte als JSON-Array zurück: ["Stichpunkt 1", "Stichpunkt 2", ...]. Jeder Eintrag = stichpunktartig gekürzt, aber inhaltlich vollständig; wichtige Abläufe dürfen nicht fehlen.`
           }
         ],
-        temperature: 0.5,
-        max_tokens: 1500
+        temperature: 0.3,
+        max_tokens: 2000
       })
     });
     
@@ -2645,6 +2918,32 @@ app.post('/api/guides/extract-usps', async (req, res) => {
       error: 'Fehler bei der USP-Extraktion', 
       message: errorMessage,
       details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
+});
+
+app.post('/api/guides/generate-objections', async (req, res) => {
+  try {
+    const userId = req.session?.user?.id;
+    if (!userId) {
+      return res.status(401).json({ error: 'Nicht angemeldet' });
+    }
+    const { usps } = req.body;
+    if (!usps) {
+      return res.status(400).json({ error: 'usps ist erforderlich' });
+    }
+    const normalized = {
+      grundsaetzlich: usps.grundsaetzlich || [],
+      gegenueberKonkurrenten: usps.gegenueberKonkurrenten || [],
+      gegenueberAlterenMethoden: usps.gegenueberAlterenMethoden || []
+    };
+    const objections = await generateObjectionResponses(normalized);
+    res.json({ success: true, objections });
+  } catch (error) {
+    console.error('Error generating objections:', error);
+    res.status(500).json({
+      error: 'Fehler bei der Generierung der Einwand-Antworten',
+      message: error.message
     });
   }
 });
