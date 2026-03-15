@@ -4536,6 +4536,49 @@ const TRAINING_MODULE_NAMES = {
 }
 const TOTAL_TRAINING_MODULES = 4
 
+// Nur <span style="background:..."> erlauben (für Leitfaden-Markierungen), Block-Tags als Zeilenumbruch
+function sanitizeHighlightHtml(html) {
+  if (!html || typeof html !== 'string') return ''
+  if (typeof document === 'undefined') return html.replace(/<[^>]+>/g, '')
+  const div = document.createElement('div')
+  div.innerHTML = html
+  const isBlock = (tag) => /^(DIV|P|BR|LI)$/i.test(tag)
+  const walk = (node) => {
+    if (node.nodeType === 3) return
+    if (node.nodeType === 1) {
+      if (node.tagName === 'SPAN') {
+        const style = (node.getAttribute('style') || '').match(/(?:background(?:-color)?)\s*:\s*[^;]+/gi)
+        if (style && style.length > 0) {
+          node.setAttribute('style', style.join(';').trim())
+          Array.from(node.childNodes).forEach(walk)
+          return
+        }
+      }
+      const frag = document.createDocumentFragment()
+      if (isBlock(node.tagName) && node.tagName !== 'BR') {
+        frag.appendChild(document.createTextNode('\n'))
+      } else if (node.tagName === 'BR') {
+        frag.appendChild(document.createTextNode('\n'))
+        node.parentNode.replaceChild(frag, node)
+        return
+      }
+      while (node.firstChild) frag.appendChild(node.firstChild)
+      node.parentNode.replaceChild(frag, node)
+      Array.from(frag.childNodes).forEach(walk)
+    }
+  }
+  Array.from(div.childNodes).forEach(walk)
+  return div.innerHTML
+}
+
+const HIGHLIGHT_COLORS = [
+  { name: 'Gelb', value: '#b45309' },
+  { name: 'Grün', value: '#166534' },
+  { name: 'Orange', value: '#c2410c' },
+  { name: 'Blau', value: '#1e40af' },
+  { name: 'Rosa', value: '#9d174d' }
+]
+
 // Leitfaden-Generator: Kapitel mit je mehreren Formulierungs-Varianten
 // Angepasst für Kaltakquise im Callcenter (telefonisch, ohne persönliche Präsenz)
 const LEITFADEN_KAPITEL = [
@@ -4692,6 +4735,7 @@ function LeitfadenGenerator() {
   })
   const [currentGuideId, setCurrentGuideId] = React.useState(null)
   const nextId = React.useRef(1)
+  const editContentRef = React.useRef(null)
   // State für eingeklappte Kapitel (alle am Anfang eingeklappt = false)
   const [expandedChapters, setExpandedChapters] = React.useState({})
   const [sharedFormulations, setSharedFormulations] = React.useState([])
@@ -4775,20 +4819,63 @@ function LeitfadenGenerator() {
 
   const startEditing = (item) => {
     setEditingId(item.id)
-    setEditingText(item.text)
+    setEditingText(item.text || '')
   }
 
+  React.useEffect(() => {
+    if (editingId && editContentRef.current) {
+      editContentRef.current.innerHTML = (sanitizeHighlightHtml(editingText) || '').replace(/\n/g, '<br>') || ''
+    }
+  }, [editingId])
+
   const saveEditing = (itemId) => {
-    if (!editingText.trim()) {
+    const raw = (editingId === itemId && editContentRef.current) ? editContentRef.current.innerHTML : editingText
+    const text = sanitizeHighlightHtml(raw).trim().replace(/<br\s*\/?>/gi, '\n')
+    if (!text.replace(/<[^>]+>/g, '').trim()) {
       setEditingId(null)
       setEditingText('')
       return
     }
     setGuideItems(prev => prev.map(item => 
-      item.id === itemId ? { ...item, text: editingText.trim(), custom: true } : item
+      item.id === itemId ? { ...item, text, custom: true } : item
     ))
     setEditingId(null)
     setEditingText('')
+  }
+
+  const applyHighlight = (color) => {
+    const sel = window.getSelection()
+    if (!sel.rangeCount || !editContentRef.current?.contains(sel.anchorNode)) return
+    const range = sel.getRangeAt(0)
+    if (range.collapsed) return
+    const span = document.createElement('span')
+    span.style.background = color
+    try {
+      range.surroundContents(span)
+    } catch (_) {
+      const frag = range.extractContents()
+      span.appendChild(frag)
+      range.insertNode(span)
+    }
+    sel.removeAllRanges()
+  }
+
+  const removeHighlight = () => {
+    const sel = window.getSelection()
+    const container = editContentRef.current
+    if (!sel.rangeCount || !container) return
+    const range = sel.getRangeAt(0)
+    if (!container.contains(range.commonAncestorContainer)) return
+    const spans = Array.from(container.querySelectorAll('span[style*="background"]')).filter((span) => {
+      try { return range.intersectsNode(span) } catch (_) { return false }
+    })
+    spans.forEach((span) => {
+      const parent = span.parentNode
+      if (!parent) return
+      while (span.firstChild) parent.insertBefore(span.firstChild, span)
+      parent.removeChild(span)
+    })
+    sel.removeAllRanges()
   }
 
   const cancelEditing = () => {
@@ -5188,23 +5275,31 @@ function LeitfadenGenerator() {
                   <span className="leitfaden-list-num">{idx + 1}.</span>
                   {editingId === item.id ? (
                     <div className="leitfaden-edit-container">
-                      <input
-                        type="text"
-                        className="leitfaden-edit-input"
-                        value={editingText}
-                        onChange={(e) => setEditingText(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
+                      <div className="leitfaden-edit-wrapper">
+                        <div className="leitfaden-highlight-toolbar">
+                          <span className="leitfaden-highlight-label">Markierung:</span>
+                          {HIGHLIGHT_COLORS.map(({ name, value }) => (
+                            <button key={value} type="button" className="leitfaden-highlight-btn" style={{ background: value }} onMouseDown={(e) => { e.preventDefault(); applyHighlight(value); }} title={name} aria-label={name} />
+                          ))}
+                          <button type="button" className="leitfaden-highlight-remove" onMouseDown={(e) => { e.preventDefault(); removeHighlight(); }} title="Markierung entfernen">✕</button>
+                        </div>
+                        <div
+                          ref={editContentRef}
+                          className="leitfaden-edit-input leitfaden-edit-textarea leitfaden-edit-contenteditable"
+                          contentEditable
+                          suppressContentEditableWarning
+                          onKeyDown={(e) => {
+                            if (e.key === 'Escape') { e.preventDefault(); cancelEditing() }
+                            else if (e.key === 'Enter' && e.ctrlKey) { e.preventDefault(); saveEditing(item.id) }
+                          }}
+                          onBlur={() => saveEditing(item.id)}
+                          onPaste={(e) => {
                             e.preventDefault()
-                            saveEditing(item.id)
-                          } else if (e.key === 'Escape') {
-                            e.preventDefault()
-                            cancelEditing()
-                          }
-                        }}
-                        onBlur={() => saveEditing(item.id)}
-                        autoFocus
-                      />
+                            const text = (e.clipboardData?.getData('text/plain') || '').replace(/\r\n/g, '\n')
+                            document.execCommand('insertText', false, text)
+                          }}
+                        />
+                      </div>
                       <div className="leitfaden-edit-actions">
                         <button type="button" className="leitfaden-edit-save" onClick={() => saveEditing(item.id)} aria-label="Speichern">✓</button>
                         <button type="button" className="leitfaden-edit-cancel" onClick={cancelEditing} aria-label="Abbrechen">✕</button>
@@ -5216,9 +5311,8 @@ function LeitfadenGenerator() {
                         className="leitfaden-list-text" 
                         onClick={() => startEditing(item)}
                         title="Klicken zum Bearbeiten"
-                      >
-                        {item.text}
-                      </span>
+                        dangerouslySetInnerHTML={{ __html: sanitizeHighlightHtml(item.text || '').replace(/\n/g, '<br>') || '&nbsp;' }}
+                      />
                       {item.custom && <span className="leitfaden-list-badge leitfaden-badge-eigen">eigen</span>}
                       {!item.custom && item.chapterId && <span className="leitfaden-list-badge">{LEITFADEN_CHAPTER_TITLES[item.chapterId] || item.chapterId}</span>}
                       <button type="button" className="leitfaden-edit" onClick={() => startEditing(item)} aria-label="Bearbeiten">✎</button>
@@ -5893,7 +5987,7 @@ function MeineLeitfaeden() {
                     {selectedGuide.items.map((item, idx) => (
                       <li key={idx} className="leitfaden-viewer-item">
                         <span className="leitfaden-viewer-num">{idx + 1}.</span>
-                        <span className="leitfaden-viewer-text">{item.text}</span>
+                        <span className="leitfaden-viewer-text" dangerouslySetInnerHTML={{ __html: sanitizeHighlightHtml(item.text || '').replace(/\n/g, '<br>') || '&nbsp;' }} />
                       </li>
                     ))}
                   </ol>

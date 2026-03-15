@@ -3203,9 +3203,13 @@ body {
 
 .leitfaden-list-text {
   flex: 1;
+  min-width: 0;
   color: #e2e8f0;
   cursor: pointer;
   padding: 0.25rem 0.5rem;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
   border-radius: 4px;
   transition: background 0.2s;
   word-wrap: break-word;
@@ -3313,6 +3317,7 @@ body {
 
 .leitfaden-list-item-editing {
   cursor: default;
+  align-items: flex-start;
 }
 
 .leitfaden-list-item-editing .leitfaden-list-num {
@@ -3322,12 +3327,14 @@ body {
 .leitfaden-edit-container {
   flex: 1;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 0.5rem;
+  min-width: 0;
 }
 
 .leitfaden-edit-input {
   flex: 1;
+  min-width: 0;
   padding: 0.5rem 0.75rem;
   background: rgba(26, 32, 44, 0.8);
   border: 2px solid #63b3ed;
@@ -3337,6 +3344,66 @@ body {
   font-family: inherit;
   outline: none;
   transition: border-color 0.2s;
+}
+
+.leitfaden-edit-wrapper {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.leitfaden-highlight-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.leitfaden-highlight-label {
+  font-size: 0.8rem;
+  color: #94a3b8;
+  margin-right: 0.25rem;
+}
+
+.leitfaden-highlight-btn {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid rgba(255,255,255,0.3);
+  border-radius: 4px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.leitfaden-highlight-btn:hover {
+  transform: scale(1.1);
+}
+
+.leitfaden-highlight-remove {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid #94a3b8;
+  border-radius: 4px;
+  background: transparent;
+  color: #94a3b8;
+  cursor: pointer;
+  font-size: 0.75rem;
+  line-height: 1;
+}
+
+.leitfaden-edit-contenteditable {
+  overflow-wrap: break-word;
+  white-space: pre-wrap;
+}
+
+.leitfaden-edit-textarea {
+  min-height: 5rem;
+  resize: vertical;
+  white-space: pre-wrap;
+  word-wrap: break-word;
 }
 
 .leitfaden-edit-input:focus {
