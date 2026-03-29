@@ -1,10 +1,16 @@
 import React, { useEffect, useState } from 'react'
-import { Routes, Route, NavLink, useSearchParams, useNavigate, useLocation } from 'react-router-dom'
+import { Routes, Route, NavLink, Navigate, useSearchParams, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from './AuthContext'
 import { apiFetch } from './api'
 import AuthModal from './AuthModal'
 import EmailChecker from './EmailChecker'
 import './App.css'
+
+/** Intern: darf fremde geteilte Leitfäden/Formulierungen löschen (Backend prüft dasselbe). */
+function isSharedThomasBoekeModerator(email) {
+  if (!email || typeof email !== 'string') return false
+  return email.trim().toLowerCase() === 'j.steiner@thomas-boeke.com'
+}
 
 // Toast Notification Context
 const ToastContext = React.createContext(null)
@@ -115,7 +121,6 @@ function Layout({ children }) {
           <nav className={`nav-tabs ${mobileMenuOpen ? 'mobile-menu-open' : ''}`} ref={mobileMenuRef}>
             <NavLink to="/training" className="nav-tab" onClick={() => setMobileMenuOpen(false)}>Vertriebs-Training</NavLink>
             <NavLink to="/practice" className="nav-tab" onClick={() => setMobileMenuOpen(false)}>Übungsmodus</NavLink>
-            <NavLink to="/scenarios" className="nav-tab" onClick={() => setMobileMenuOpen(false)}>Szenarien</NavLink>
             <NavLink to="/leitfaden" className="nav-tab" onClick={() => setMobileMenuOpen(false)}>Leitfaden</NavLink>
             <NavLink to="/email-check" className="nav-tab" onClick={() => setMobileMenuOpen(false)}>E-Mail-Prüfung</NavLink>
           </nav>
@@ -216,7 +221,7 @@ function Home() {
         <div className="training-card">
           <h3><i className="fas fa-theater-masks"></i> Verkaufsszenarien</h3>
           <p>Übe mit echten Verkaufssituationen aus verschiedenen Branchen und Zielgruppen.</p>
-          <button className="btn" onClick={() => window.location.href = '/scenarios'}>Szenarien erkunden</button>
+          <button className="btn" onClick={() => { window.location.href = '/intern?tab=szenarien' }}>Szenarien erkunden</button>
         </div>
         
         <div className="training-card">
@@ -4130,7 +4135,7 @@ function Practice() {
   )
 }
 
-function Scenarios() {
+function Scenarios({ embedded = false } = {}) {
   const { user } = useAuth()
   const [scenarios, setScenarios] = React.useState([])
   const [filteredScenarios, setFilteredScenarios] = React.useState([])
@@ -4429,11 +4434,17 @@ function Scenarios() {
   }
 
   return (
-    <div className="scenarios-container">
-      <div className="section-header">
-        <h2>Verkaufsszenarien</h2>
-        <p>Übe mit echten Verkaufssituationen aus verschiedenen Branchen</p>
-      </div>
+    <div className={`scenarios-container${embedded ? ' scenarios-container--intern' : ''}`}>
+      {!embedded ? (
+        <div className="section-header">
+          <h2>Verkaufsszenarien</h2>
+          <p>Übe mit echten Verkaufssituationen aus verschiedenen Branchen</p>
+        </div>
+      ) : (
+        <p style={{ color: '#a0aec0', marginBottom: '1.25rem', marginTop: 0 }}>
+          Übe mit echten Verkaufssituationen aus verschiedenen Branchen.
+        </p>
+      )}
 
       <div className="industry-filters">
         <h3>Wähle deine Branche:</h3>
@@ -4739,10 +4750,15 @@ function LeitfadenGenerator() {
   // State für eingeklappte Kapitel (alle am Anfang eingeklappt = false)
   const [expandedChapters, setExpandedChapters] = React.useState({})
   const [sharedFormulations, setSharedFormulations] = React.useState([])
-  const [showAddUSP, setShowAddUSP] = React.useState(false)
-  const [newUSPTitle, setNewUSPTitle] = React.useState('')
-  const [newUSPDescription, setNewUSPDescription] = React.useState('')
-  const [newUSPCategory, setNewUSPCategory] = React.useState('grundsaetzlich')
+  const [guideObjections, setGuideObjections] = React.useState([])
+  const [generatingObjections, setGeneratingObjections] = React.useState(false)
+  const [showUspObjectionsWindow, setShowUspObjectionsWindow] = React.useState(false)
+
+  const uspCategoryKeys = React.useMemo(() => ([
+    { key: 'grundsaetzlich', label: '1. Grundsätzliche USPs' },
+    { key: 'gegenueberKonkurrenten', label: '2. USPs gegenüber ähnlichen Konkurrenten' },
+    { key: 'gegenueberAlterenMethoden', label: '3. USPs gegenüber älteren Methoden' }
+  ]), [])
 
   // Laden eines Leitfadens zum Bearbeiten
   React.useEffect(() => {
@@ -4770,6 +4786,7 @@ function LeitfadenGenerator() {
   })), [sharedFormulations])
 
   const loadGuideForEdit = async (guideId) => {
+    setGuideObjections([])
     try {
       const res = await apiFetch('/api/guides/me')
       if (res.ok) {
@@ -4799,6 +4816,17 @@ function LeitfadenGenerator() {
                 gegenueberAlterenMethoden: usps.gegenueberAlterenMethoden || []
               })
             }
+          }
+          if (Array.isArray(guide.objections) && guide.objections.length > 0) {
+            setGuideObjections(guide.objections.map((o) => {
+              if (o && typeof o === 'object' && (o.title !== undefined || o.response !== undefined)) {
+                return { title: String(o.title ?? ''), response: String(o.response ?? '') }
+              }
+              if (typeof o === 'string') return { title: o, response: '' }
+              return { title: '', response: '' }
+            }))
+          } else {
+            setGuideObjections([])
           }
         }
       }
@@ -4962,10 +4990,14 @@ function LeitfadenGenerator() {
 
     setSaving(true)
     try {
+      const normalizedObjections = guideObjections
+        .filter((o) => (o.title && o.title.trim()) || (o.response && o.response.trim()))
+        .map((o) => ({ title: (o.title || '').trim() || 'Einwand', response: (o.response || '').trim() }))
       const payload = {
         title: saveTitle.trim(),
         items: guideItems,
-        usps: getTotalUSPCount() > 0 ? extractedUSPs : null
+        usps: getTotalUSPCount() > 0 ? extractedUSPs : null,
+        objections: normalizedObjections.length > 0 ? normalizedObjections : null
       }
 
       let res
@@ -5136,33 +5168,27 @@ function LeitfadenGenerator() {
     }
   }
 
-  const addManualUSP = () => {
-    if (!newUSPTitle.trim() || !newUSPDescription.trim()) {
-      showToast('Bitte Titel und Beschreibung ausfüllen', 'error')
-      return
-    }
-
-    const newUSP = {
-      title: newUSPTitle.trim(),
-      description: newUSPDescription.trim()
-    }
-
-    setExtractedUSPs(prev => {
-      const updated = { ...prev }
-      if (newUSPCategory === 'grundsaetzlich') {
-        updated.grundsaetzlich = [...(updated.grundsaetzlich || []), newUSP]
-      } else if (newUSPCategory === 'gegenueberKonkurrenten') {
-        updated.gegenueberKonkurrenten = [...(updated.gegenueberKonkurrenten || []), newUSP]
-      } else if (newUSPCategory === 'gegenueberAlterenMethoden') {
-        updated.gegenueberAlterenMethoden = [...(updated.gegenueberAlterenMethoden || []), newUSP]
-      }
-      return updated
+  const updateUSPField = (category, index, field, value) => {
+    setExtractedUSPs((prev) => {
+      const arr = [...(prev[category] || [])]
+      if (!arr[index]) return prev
+      arr[index] = { ...arr[index], [field]: value }
+      return { ...prev, [category]: arr }
     })
+  }
 
-    setNewUSPTitle('')
-    setNewUSPDescription('')
-    setShowAddUSP(false)
-    showToast('USP hinzugefügt', 'success')
+  const removeUSPFromCategory = (category, index) => {
+    setExtractedUSPs((prev) => ({
+      ...prev,
+      [category]: (prev[category] || []).filter((_, i) => i !== index)
+    }))
+  }
+
+  const addEmptyUSPToCategory = (category) => {
+    setExtractedUSPs((prev) => ({
+      ...prev,
+      [category]: [...(prev[category] || []), { title: '', description: '' }]
+    }))
   }
 
   return (
@@ -5229,6 +5255,11 @@ function LeitfadenGenerator() {
               </button>
             </div>
           </div>
+          <div style={{ marginTop: '1.25rem' }}>
+            <button type="button" className="btn btn-outline" onClick={() => setShowUspObjectionsWindow(true)}>
+              USPs &amp; Einwände bearbeiten
+            </button>
+          </div>
         </section>
 
         <section
@@ -5252,6 +5283,15 @@ function LeitfadenGenerator() {
         >
           <h3>Dein Leitfaden</h3>
           <p className="leitfaden-hint">Reihenfolge per Drag & Drop ändern. Klicke auf einen Satz oder ✎ zum Bearbeiten. ✕ zum Entfernen.</p>
+          {guideItems.length > 0 && (
+            <div className="leitfaden-actions leitfaden-actions-top" role="toolbar" aria-label="Leitfaden-Aktionen">
+              <button type="button" className="btn btn-sm" onClick={handleCopy}>Leitfaden kopieren</button>
+              <button type="button" className="btn btn-sm btn-primary" onClick={() => setShowSaveModal(true)}>
+                Leitfaden speichern
+              </button>
+              <button type="button" className="btn btn-sm btn-outline" onClick={() => setGuideItems([])}>Leitfaden leeren</button>
+            </div>
+          )}
           {guideItems.length === 0 ? (
             <p className="leitfaden-placeholder">Sätze hierher ziehen oder aus den Vorschlägen hinzufügen.</p>
           ) : (
@@ -5323,23 +5363,157 @@ function LeitfadenGenerator() {
               ))}
             </ol>
           )}
-          {guideItems.length > 0 && (
-            <div className="leitfaden-actions">
-              <button type="button" className="btn" onClick={handleCopy}>Leitfaden kopieren</button>
-              <button type="button" className="btn btn-outline" onClick={() => setShowUSPExtractor(true)}>
-                USPs extrahieren
-              </button>
-              <button type="button" className="btn btn-outline" onClick={() => setShowAddUSP(true)}>
-                USP manuell hinzufügen
-              </button>
-              <button type="button" className="btn btn-primary" onClick={() => setShowSaveModal(true)}>
-                Leitfaden speichern
-              </button>
-              <button type="button" className="btn btn-outline" onClick={() => setGuideItems([])}>Leitfaden leeren</button>
-            </div>
-          )}
         </section>
       </div>
+
+      {/* Fenster: USPs & Einwände bearbeiten */}
+      {showUspObjectionsWindow && (
+        <div className="modal-overlay" onClick={() => setShowUspObjectionsWindow(false)}>
+          <div
+            className="modal-content modal-content-large"
+            onClick={(e) => e.stopPropagation()}
+            style={{ maxWidth: '920px', maxHeight: '90vh', overflow: 'auto' }}
+          >
+            <h3>USPs &amp; mögliche Einwände</h3>
+            <p className="leitfaden-hint" style={{ marginBottom: '1rem' }}>
+              Änderungen liegen im Entwurf; dauerhaft werden sie mit „Leitfaden speichern“ übernommen.
+            </p>
+
+            <div style={{ marginBottom: '1.25rem' }}>
+              <button
+                type="button"
+                className="btn btn-outline btn-sm"
+                onClick={() => {
+                  setShowUspObjectionsWindow(false)
+                  setShowUSPExtractor(true)
+                }}
+              >
+                USPs aus Website extrahieren…
+              </button>
+            </div>
+
+            <h4 style={{ marginBottom: '0.5rem', marginTop: 0 }}>USPs</h4>
+            {getTotalUSPCount() === 0 && (
+              <p className="leitfaden-hint" style={{ marginBottom: '1rem' }}>Noch keine USPs – extrahieren oder unten „+ USP in dieser Kategorie“ nutzen.</p>
+            )}
+            {uspCategoryKeys.map(({ key, label }) => (
+              <div key={key} style={{ marginBottom: '1.25rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                  <strong>{label}</strong>
+                  <button type="button" className="btn btn-outline btn-sm" onClick={() => addEmptyUSPToCategory(key)}>
+                    + USP in dieser Kategorie
+                  </button>
+                </div>
+                {(extractedUSPs[key] || []).map((usp, idx) => (
+                  <div
+                    key={`${key}-${idx}`}
+                    style={{
+                      marginBottom: '0.75rem',
+                      padding: '0.75rem',
+                      borderRadius: '8px',
+                      border: '1px solid rgba(74, 85, 104, 0.45)',
+                      background: 'rgba(26, 32, 44, 0.35)'
+                    }}
+                  >
+                    <input
+                      type="text"
+                      className="leitfaden-input"
+                      value={usp.title || ''}
+                      onChange={(e) => updateUSPField(key, idx, 'title', e.target.value)}
+                      placeholder="Überschrift"
+                      style={{ width: '100%', marginBottom: '0.4rem', boxSizing: 'border-box' }}
+                    />
+                    <textarea
+                      className="leitfaden-input"
+                      value={usp.description || ''}
+                      onChange={(e) => updateUSPField(key, idx, 'description', e.target.value)}
+                      placeholder="Beschreibung"
+                      rows={3}
+                      style={{ width: '100%', boxSizing: 'border-box', resize: 'vertical' }}
+                    />
+                    <button type="button" className="btn btn-outline btn-sm" style={{ marginTop: '0.4rem' }} onClick={() => removeUSPFromCategory(key, idx)}>
+                      Entfernen
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ))}
+
+            <hr style={{ border: 'none', borderTop: '1px solid rgba(255,255,255,0.12)', margin: '1.25rem 0' }} />
+
+            <h4 style={{ marginBottom: '0.5rem' }}>Mögliche Einwände</h4>
+            <p className="leitfaden-hint" style={{ marginBottom: '0.75rem' }}>Antworten fürs Gespräch; KI nutzt die USPs oben.</p>
+            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
+              <button
+                type="button"
+                className="btn btn-outline btn-sm"
+                disabled={generatingObjections || getTotalUSPCount() === 0}
+                onClick={async () => {
+                  setGeneratingObjections(true)
+                  try {
+                    const res = await apiFetch('/api/guides/generate-objections', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ usps: extractedUSPs })
+                    })
+                    const data = res.ok ? await res.json() : null
+                    const list = (data?.objections || []).map((o) => ({ title: o.title || 'Einwand', response: o.response || '' }))
+                    setGuideObjections(list)
+                    showToast('Einwände eingefügt – mit „Leitfaden speichern“ persistieren', 'success')
+                  } catch (_) {
+                    showToast('Fehler bei der Generierung', 'error')
+                  } finally {
+                    setGeneratingObjections(false)
+                  }
+                }}
+              >
+                {generatingObjections ? 'Generiere…' : 'Mit KI aus USPs generieren'}
+              </button>
+            </div>
+            {getTotalUSPCount() === 0 && (
+              <p className="leitfaden-hint" style={{ marginBottom: '0.75rem' }}>Für die KI-Generierung zuerst USPs anlegen.</p>
+            )}
+            {guideObjections.map((row, idx) => (
+              <div key={idx} style={{ marginBottom: '0.85rem' }}>
+                <input
+                  type="text"
+                  className="leitfaden-input"
+                  value={row.title}
+                  onChange={(e) => {
+                    const v = e.target.value
+                    setGuideObjections((prev) => prev.map((r, i) => (i === idx ? { ...r, title: v } : r)))
+                  }}
+                  placeholder="Einwand (Kurztitel)"
+                  style={{ width: '100%', marginBottom: '0.35rem', boxSizing: 'border-box' }}
+                />
+                <textarea
+                  className="leitfaden-input"
+                  value={row.response}
+                  onChange={(e) => {
+                    const v = e.target.value
+                    setGuideObjections((prev) => prev.map((r, i) => (i === idx ? { ...r, response: v } : r)))
+                  }}
+                  placeholder="Antwort zum Vorlesen"
+                  rows={3}
+                  style={{ width: '100%', boxSizing: 'border-box', resize: 'vertical' }}
+                />
+                <button type="button" className="btn btn-outline btn-sm" style={{ marginTop: '0.35rem' }} onClick={() => setGuideObjections((prev) => prev.filter((_, i) => i !== idx))}>
+                  Entfernen
+                </button>
+              </div>
+            ))}
+            <button type="button" className="btn btn-outline btn-sm" onClick={() => setGuideObjections((prev) => [...prev, { title: '', response: '' }])}>
+              + Einwand
+            </button>
+
+            <div className="modal-actions" style={{ marginTop: '1.25rem' }}>
+              <button type="button" className="btn btn-primary" onClick={() => setShowUspObjectionsWindow(false)}>
+                Schließen
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Save Modal */}
       {showSaveModal && (
@@ -5525,79 +5699,18 @@ function LeitfadenGenerator() {
           </div>
         </div>
       )}
-
-      {/* Modal: USP manuell hinzufügen */}
-      {showAddUSP && (
-        <div className="modal-overlay" onClick={() => setShowAddUSP(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <h3>USP manuell hinzufügen</h3>
-            <div className="modal-form">
-              <label>
-                Kategorie:
-                <select
-                  value={newUSPCategory}
-                  onChange={(e) => setNewUSPCategory(e.target.value)}
-                  style={{ width: '100%', padding: '0.75rem', borderRadius: '6px', background: 'rgba(26, 32, 44, 0.8)', color: '#e2e8f0', border: '1px solid rgba(74, 85, 104, 0.5)' }}
-                >
-                  <option value="grundsaetzlich">Grundsätzliche USPs</option>
-                  <option value="gegenueberKonkurrenten">USPs gegenüber Konkurrenten</option>
-                  <option value="gegenueberAlterenMethoden">USPs gegenüber älteren Methoden</option>
-                </select>
-              </label>
-              <label>
-                Überschrift:
-                <input
-                  type="text"
-                  value={newUSPTitle}
-                  onChange={(e) => setNewUSPTitle(e.target.value)}
-                  placeholder="z. B. Schnelle Implementierung"
-                  style={{ width: '100%', padding: '0.75rem', borderRadius: '6px', background: 'rgba(26, 32, 44, 0.8)', color: '#e2e8f0', border: '1px solid rgba(74, 85, 104, 0.5)' }}
-                />
-              </label>
-              <label>
-                Inhalt:
-                <textarea
-                  value={newUSPDescription}
-                  onChange={(e) => setNewUSPDescription(e.target.value)}
-                  placeholder="Beschreibung des USP..."
-                  rows={4}
-                  style={{ width: '100%', padding: '0.75rem', borderRadius: '6px', background: 'rgba(26, 32, 44, 0.8)', color: '#e2e8f0', border: '1px solid rgba(74, 85, 104, 0.5)', resize: 'vertical' }}
-                />
-              </label>
-            </div>
-            <div className="modal-actions">
-              <button
-                type="button"
-                className="btn btn-primary"
-                onClick={addManualUSP}
-                disabled={!newUSPTitle.trim() || !newUSPDescription.trim()}
-              >
-                USP hinzufügen
-              </button>
-              <button
-                type="button"
-                className="btn btn-outline"
-                onClick={() => {
-                  setShowAddUSP(false)
-                  setNewUSPTitle('')
-                  setNewUSPDescription('')
-                }}
-              >
-                Abbrechen
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }
 
 function MeineLeitfaeden() {
   const { user, loading: authLoading, setShowAuthModal } = useAuth()
+  const navigate = useNavigate()
+  const location = useLocation()
   const [guides, setGuides] = React.useState([])
   const [loading, setLoading] = React.useState(true)
   const [selectedGuide, setSelectedGuide] = React.useState(null)
+  const [selectedGuideIsSharedPreview, setSelectedGuideIsSharedPreview] = React.useState(false)
   const [viewMode, setViewMode] = React.useState('full') // 'full' or 'bullets'
   const [showDeleteConfirm, setShowDeleteConfirm] = React.useState(null)
   const [convertedBullets, setConvertedBullets] = React.useState([])
@@ -5605,8 +5718,6 @@ function MeineLeitfaeden() {
   const [selectedUSP, setSelectedUSP] = React.useState(null)
   const [hoveredUSP, setHoveredUSP] = React.useState(null)
   const [tooltipPos, setTooltipPos] = React.useState({ top: 0, left: 0 })
-  const [objections, setObjections] = React.useState(null)
-  const [loadingObjections, setLoadingObjections] = React.useState(false)
   const [editingBullets, setEditingBullets] = React.useState(false)
   const [bulletsEditText, setBulletsEditText] = React.useState('')
   const [sharedGuides, setSharedGuides] = React.useState([])
@@ -5636,33 +5747,30 @@ function MeineLeitfaeden() {
       .catch(() => { setSharedGuides([]); setLoadingSharedGuides(false) })
   }, [isThomasBoeke])
 
-  // Situationsbezogene Einwände per API laden (zum Vorlesen, USPs dürfen interpretiert werden)
-  React.useEffect(() => {
-    if (!selectedGuide?.usps) {
-      setObjections(null)
-      return
-    }
-    const usps = Array.isArray(selectedGuide.usps)
-      ? { grundsaetzlich: selectedGuide.usps, gegenueberKonkurrenten: [], gegenueberAlterenMethoden: [] }
-      : selectedGuide.usps
-    const total = (usps.grundsaetzlich?.length || 0) + (usps.gegenueberKonkurrenten?.length || 0) + (usps.gegenueberAlterenMethoden?.length || 0)
-    if (total === 0) {
-      setObjections(null)
-      return
-    }
-    let cancelled = false
-    setLoadingObjections(true)
-    setObjections(null)
-    apiFetch('/api/guides/generate-objections', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ usps })
+  const openSharedGuidePreview = React.useCallback((g) => {
+    if (!g) return
+    setSelectedGuide({
+      id: `shared-${g.id}`,
+      title: g.title,
+      items: g.items || [],
+      usps: g.usps ?? null,
+      bullets: g.bullets ?? null,
+      objections: g.objections ?? null,
+      createdAt: g.created_at
     })
-      .then(res => res.ok ? res.json() : Promise.reject(new Error('Fehler beim Laden')))
-      .then(data => { if (!cancelled) { setObjections(data.objections || []); setLoadingObjections(false) } })
-      .catch(() => { if (!cancelled) { setObjections(null); setLoadingObjections(false) } })
-    return () => { cancelled = true }
-  }, [selectedGuide?.id, selectedGuide?.usps])
+    setSelectedGuideIsSharedPreview(true)
+    setViewMode('full')
+    setSelectedUSP(null)
+    setEditingBullets(false)
+  }, [])
+
+  React.useEffect(() => {
+    const g = location.state?.sharedPreview
+    if (g && typeof g === 'object' && g.title != null) {
+      openSharedGuidePreview(g)
+      navigate('/leitfaden/meine', { replace: true, state: {} })
+    }
+  }, [location.state, navigate, openSharedGuidePreview])
 
   const loadGuides = async () => {
     setLoading(true)
@@ -5708,12 +5816,13 @@ function MeineLeitfaeden() {
           title: guide.title,
           items: guide.items || [],
           usps: guide.usps || null,
-          bullets: guide.bullets || null
+          bullets: guide.bullets || null,
+          objections: guide.objections || null
         })
       })
       if (res.ok) {
         const data = await res.json()
-        if (data.guide) setGuides(prev => [...prev, { ...data.guide, id: data.guide.id, createdAt: data.guide.createdAt, updatedAt: data.guide.updatedAt }])
+        if (data.guide) setGuides(prev => [...prev, { ...data.guide, id: data.guide.id, createdAt: data.guide.createdAt, updatedAt: data.guide.updatedAt, objections: data.guide.objections }])
         showToast('Kopie in deine Leitfäden übernommen', 'success')
       } else {
         const d = await res.json().catch(() => ({}))
@@ -5721,6 +5830,26 @@ function MeineLeitfaeden() {
       }
     } catch (e) {
       showToast('Fehler beim Übernehmen', 'error')
+    }
+  }
+
+  const canDeleteAnySharedGuide = isSharedThomasBoekeModerator(user?.email)
+  const canDeleteSharedGuideRow = (g) =>
+    canDeleteAnySharedGuide || String(g.shared_by) === String(user?.id)
+
+  const handleDeleteSharedGuideEntry = async (id) => {
+    if (!window.confirm('Diesen geteilten Leitfaden aus dem Intern-Pool entfernen?')) return
+    try {
+      const res = await apiFetch(`/api/shared/guides/${id}`, { method: 'DELETE' })
+      if (res.ok) {
+        setSharedGuides(prev => prev.filter(x => x.id !== id))
+        showToast('Geteilter Leitfaden entfernt', 'success')
+      } else {
+        const d = await res.json().catch(() => ({}))
+        showToast(d.error || 'Löschen fehlgeschlagen', 'error')
+      }
+    } catch (e) {
+      showToast('Fehler beim Löschen', 'error')
     }
   }
 
@@ -5754,6 +5883,11 @@ function MeineLeitfaeden() {
         const withPrefix = bullets.map(b => (b.startsWith('•') ? b : `• ${b}`))
         if (cancelled) return
         setConvertedBullets(withPrefix)
+        if (selectedGuideIsSharedPreview) {
+          const raw = bullets.map(b => (typeof b === 'string' && b.startsWith('•') ? b.slice(1).trim() : b))
+          setSelectedGuide(prev => (prev && prev.id === selectedGuide.id ? { ...prev, bullets: raw } : prev))
+          return
+        }
         const raw = bullets.map(b => (typeof b === 'string' && b.startsWith('•') ? b.slice(1).trim() : b))
         const patchRes = await apiFetch(`/api/guides/${selectedGuide.id}/bullets`, {
           method: 'PATCH',
@@ -5779,7 +5913,7 @@ function MeineLeitfaeden() {
       })
       .finally(() => { if (!cancelled) setConvertingBullets(false) })
     return () => { cancelled = true }
-  }, [selectedGuide?.id, selectedGuide?.items, selectedGuide?.bullets, viewMode])
+  }, [selectedGuide?.id, selectedGuide?.items, selectedGuide?.bullets, viewMode, selectedGuideIsSharedPreview])
 
   if (authLoading || loading) {
     return <div className="loading">Lade Leitfäden...</div>
@@ -5875,16 +6009,31 @@ function MeineLeitfaeden() {
       return [...standardObjections, ...objections].slice(0, 8) // Maximal 8 Einwände
     }
     
-    // Links: Alle USPs, Rechts: Einwände (API = situationsbezogen zum Vorlesen, sonst Fallback)
+    // Links: Alle USPs, Rechts: Einwände (nur Anzeige: gespeichert oder lokale USP-Vorschau)
     const leftUSPs = allUSPs
-    const displayObjections = (objections && objections.length > 0) ? objections : generateObjections(usps)
+    const rawSavedObj = selectedGuide.objections
+    const savedObjectionsList = Array.isArray(rawSavedObj) && rawSavedObj.length > 0
+      ? rawSavedObj.map((o) => (o && typeof o === 'object'
+        ? { title: o.title || 'Einwand', response: o.response || '' }
+        : { title: String(o || 'Einwand'), response: '' }))
+      : []
+    const displayObjections = savedObjectionsList.length > 0
+      ? savedObjectionsList
+      : (leftUSPs.length > 0 ? generateObjections(usps) : [])
+    const objectionsArePreviewOnly = savedObjectionsList.length === 0 && displayObjections.length > 0
 
     return (
       <div className="leitfaden-viewer-container">
         <div className="leitfaden-viewer-header">
-          <button className="btn btn-outline" onClick={() => { setSelectedGuide(null); setSelectedUSP(null); }}>← Zurück</button>
-          <h2>{selectedGuide.title}</h2>
+          <button className="btn btn-outline" onClick={() => { setSelectedGuide(null); setSelectedGuideIsSharedPreview(false); setSelectedUSP(null); }}>← Zurück</button>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <h2 style={{ marginBottom: selectedGuideIsSharedPreview ? '0.25rem' : undefined }}>{selectedGuide.title}</h2>
+            {selectedGuideIsSharedPreview && (
+              <p style={{ margin: 0, fontSize: '0.85rem', color: '#94a3b8' }}>Geteilter Leitfaden (Intern) – nur Ansicht, keine Kopie bei dir gespeichert</p>
+            )}
+          </div>
           <div className="leitfaden-viewer-actions">
+            <div className="leitfaden-viewer-viewmode-toggle" role="group" aria-label="Ansicht wechseln">
             <button 
               className={`btn ${viewMode === 'full' ? 'btn-primary' : 'btn-outline'}`}
               onClick={() => setViewMode('full')}
@@ -5897,9 +6046,16 @@ function MeineLeitfaeden() {
             >
               Stichpunkte
             </button>
-            <NavLink to={`/leitfaden/generator?edit=${selectedGuide.id}`} className="btn btn-outline">
-              Bearbeiten
-            </NavLink>
+            </div>
+            {selectedGuideIsSharedPreview ? (
+              <button type="button" className="btn btn-outline" onClick={() => handleCopySharedGuideToMe({ title: selectedGuide.title, items: selectedGuide.items, usps: selectedGuide.usps, bullets: selectedGuide.bullets, objections: selectedGuide.objections })}>
+                Kopie zu mir
+              </button>
+            ) : (
+              <NavLink to={`/leitfaden/generator?edit=${selectedGuide.id}`} className="btn btn-outline">
+                Bearbeiten
+              </NavLink>
+            )}
           </div>
         </div>
         <div className="leitfaden-viewer-layout">
@@ -5907,58 +6063,72 @@ function MeineLeitfaeden() {
           <div className="leitfaden-viewer-sidebar leitfaden-viewer-sidebar-left">
             <h3>USPs</h3>
             {leftUSPs.length > 0 ? (
-              <div className="usp-sidebar-list">
-                {leftUSPs.map((usp, idx) => {
-                  const displayUSP = usp
-                  const uspId = `left-${usp.category}-${usp.index}`
-                  const isHovered = hoveredUSP === uspId
+              <div className="usp-sidebar-by-category">
+                {[
+                  { key: 'grundsaetzlich', label: '1. Grundsätzliche USPs', items: grundsaetzlich },
+                  { key: 'gegenueberKonkurrenten', label: '2. USPs gegenüber ähnlichen Konkurrenten', items: gegenueberKonkurrenten },
+                  { key: 'gegenueberAlterenMethoden', label: '3. USPs gegenüber älteren Methoden', items: gegenueberAlterenMethoden }
+                ].map(({ key, label, items }) => {
+                  if (!items || items.length === 0) return null
                   return (
-                    <div
-                      key={uspId}
-                      className="usp-sidebar-item"
-                      onMouseEnter={(e) => {
-                        const updatePos = () => {
-                          const rect = e.currentTarget.getBoundingClientRect()
-                          setTooltipPos({
-                            top: rect.top,
-                            left: rect.right + 10
-                          })
-                        }
-                        setHoveredUSP(uspId)
-                        updatePos()
-                        const handleScroll = () => updatePos()
-                        window.addEventListener('scroll', handleScroll, true)
-                        e.currentTarget._scrollHandler = handleScroll
-                      }}
-                      onMouseMove={(e) => {
-                        if (hoveredUSP === uspId) {
-                          const rect = e.currentTarget.getBoundingClientRect()
-                          setTooltipPos({
-                            top: rect.top,
-                            left: rect.right + 10
-                          })
-                        }
-                      }}
-                      onMouseLeave={(e) => {
-                        setHoveredUSP(null)
-                        if (e.currentTarget._scrollHandler) {
-                          window.removeEventListener('scroll', e.currentTarget._scrollHandler, true)
-                          delete e.currentTarget._scrollHandler
-                        }
-                      }}
-                    >
-                      <div className="usp-sidebar-title">{displayUSP.title}</div>
-                      {isHovered && (
-                        <div 
-                          className="usp-sidebar-tooltip usp-sidebar-tooltip-left"
-                          style={{ top: `${tooltipPos.top}px`, left: `${tooltipPos.left}px` }}
-                        >
-                          <div className="usp-sidebar-tooltip-content">
-                            <strong>{displayUSP.title}</strong>
-                            <p>{displayUSP.description}</p>
-                          </div>
-                        </div>
-                      )}
+                    <div key={key} className="usp-sidebar-category">
+                      <h4 className="usp-sidebar-category-title">{label}</h4>
+                      <div className="usp-sidebar-list">
+                        {items.map((usp, idx) => {
+                          const displayUSP = usp
+                          const uspId = `left-${key}-${idx}`
+                          const isHovered = hoveredUSP === uspId
+                          return (
+                            <div
+                              key={uspId}
+                              className="usp-sidebar-item"
+                              onMouseEnter={(e) => {
+                                const updatePos = () => {
+                                  const rect = e.currentTarget.getBoundingClientRect()
+                                  setTooltipPos({
+                                    top: rect.top,
+                                    left: rect.right + 10
+                                  })
+                                }
+                                setHoveredUSP(uspId)
+                                updatePos()
+                                const handleScroll = () => updatePos()
+                                window.addEventListener('scroll', handleScroll, true)
+                                e.currentTarget._scrollHandler = handleScroll
+                              }}
+                              onMouseMove={(e) => {
+                                if (hoveredUSP === uspId) {
+                                  const rect = e.currentTarget.getBoundingClientRect()
+                                  setTooltipPos({
+                                    top: rect.top,
+                                    left: rect.right + 10
+                                  })
+                                }
+                              }}
+                              onMouseLeave={(e) => {
+                                setHoveredUSP(null)
+                                if (e.currentTarget._scrollHandler) {
+                                  window.removeEventListener('scroll', e.currentTarget._scrollHandler, true)
+                                  delete e.currentTarget._scrollHandler
+                                }
+                              }}
+                            >
+                              <div className="usp-sidebar-title">{displayUSP.title}</div>
+                              {isHovered && (
+                                <div
+                                  className="usp-sidebar-tooltip usp-sidebar-tooltip-left"
+                                  style={{ top: `${tooltipPos.top}px`, left: `${tooltipPos.left}px` }}
+                                >
+                                  <div className="usp-sidebar-tooltip-content">
+                                    <strong>{displayUSP.title}</strong>
+                                    <p>{displayUSP.description}</p>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          )
+                        })}
+                      </div>
                     </div>
                   )
                 })}
@@ -6005,9 +6175,11 @@ function MeineLeitfaeden() {
                           ))}
                         </ul>
                         <div className="leitfaden-bullets-actions" style={{ marginTop: '1rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                          <button type="button" className="btn btn-outline btn-sm" onClick={() => { setBulletsEditText(convertedBullets.map(b => (b.startsWith('•') ? b.slice(1).trim() : b)).join('\n')); setEditingBullets(true) }}>
-                            Manuell bearbeiten
-                          </button>
+                          {!selectedGuideIsSharedPreview && (
+                            <button type="button" className="btn btn-outline btn-sm" onClick={() => { setBulletsEditText(convertedBullets.map(b => (b.startsWith('•') ? b.slice(1).trim() : b)).join('\n')); setEditingBullets(true) }}>
+                              Manuell bearbeiten
+                            </button>
+                          )}
                           <button type="button" className="btn btn-outline btn-sm" onClick={async () => {
                             setConvertingBullets(true)
                             try {
@@ -6015,14 +6187,20 @@ function MeineLeitfaeden() {
                               const data = res.ok ? await res.json() : null
                               const bullets = data?.bullets || []
                               const raw = bullets.map(b => (b.startsWith('•') ? b.slice(1).trim() : b))
-                              const patchRes = await apiFetch(`/api/guides/${selectedGuide.id}/bullets`, { method: 'PATCH', body: JSON.stringify({ bullets: raw }) })
-                              if (patchRes.ok) {
-                                const patchData = await patchRes.json()
-                                const g = patchData.guide
+                              if (selectedGuideIsSharedPreview) {
                                 setConvertedBullets(bullets.map(b => (b.startsWith('•') ? b : `• ${b}`)))
-                                setSelectedGuide(prev => prev?.id === g.id ? { ...prev, bullets: g.bullets } : prev)
-                                setGuides(prev => prev.map(x => x.id === g.id ? { ...x, bullets: g.bullets } : x))
-                                showToast('Stichpunkte neu generiert und gespeichert', 'success')
+                                setSelectedGuide(prev => (prev && prev.id === selectedGuide.id ? { ...prev, bullets: raw } : prev))
+                                showToast('Stichpunkte neu generiert (nur in dieser Ansicht)', 'success')
+                              } else {
+                                const patchRes = await apiFetch(`/api/guides/${selectedGuide.id}/bullets`, { method: 'PATCH', body: JSON.stringify({ bullets: raw }) })
+                                if (patchRes.ok) {
+                                  const patchData = await patchRes.json()
+                                  const g = patchData.guide
+                                  setConvertedBullets(bullets.map(b => (b.startsWith('•') ? b : `• ${b}`)))
+                                  setSelectedGuide(prev => prev?.id === g.id ? { ...prev, bullets: g.bullets } : prev)
+                                  setGuides(prev => prev.map(x => x.id === g.id ? { ...x, bullets: g.bullets } : x))
+                                  showToast('Stichpunkte neu generiert und gespeichert', 'success')
+                                }
                               }
                             } catch (e) {
                               showToast('Fehler beim Generieren', 'error')
@@ -6033,6 +6211,7 @@ function MeineLeitfaeden() {
                             Neu mit KI generieren
                           </button>
                         </div>
+
                       </>
                     ) : editingBullets ? (
                       <div>
@@ -6086,64 +6265,69 @@ function MeineLeitfaeden() {
           {/* Rechte Sidebar: Einwände */}
           <div className="leitfaden-viewer-sidebar leitfaden-viewer-sidebar-right">
             <h3>Mögliche Einwände</h3>
-            {loadingObjections ? (
-              <p className="usp-sidebar-empty">Einwände werden generiert…</p>
-            ) : displayObjections.length > 0 ? (
-              <div className="usp-sidebar-list">
-                {displayObjections.map((objection, idx) => {
-                  const objectionId = `objection-${idx}`
-                  const isHovered = hoveredUSP === objectionId
-                  return (
-                    <div
-                      key={objectionId}
-                      className="usp-sidebar-item"
-                      onMouseEnter={(e) => {
-                        const updatePos = () => {
-                          const rect = e.currentTarget.getBoundingClientRect()
-                          setTooltipPos({
-                            top: rect.top,
-                            left: rect.left - 310
-                          })
-                        }
-                        setHoveredUSP(objectionId)
-                        updatePos()
-                        const handleScroll = () => updatePos()
-                        window.addEventListener('scroll', handleScroll, true)
-                        e.currentTarget._scrollHandler = handleScroll
-                      }}
-                      onMouseMove={(e) => {
-                        if (hoveredUSP === objectionId) {
-                          const rect = e.currentTarget.getBoundingClientRect()
-                          setTooltipPos({
-                            top: rect.top,
-                            left: rect.left - 310
-                          })
-                        }
-                      }}
-                      onMouseLeave={(e) => {
-                        setHoveredUSP(null)
-                        if (e.currentTarget._scrollHandler) {
-                          window.removeEventListener('scroll', e.currentTarget._scrollHandler, true)
-                          delete e.currentTarget._scrollHandler
-                        }
-                      }}
-                    >
-                      <div className="usp-sidebar-title">{objection.title}</div>
-                      {isHovered && (
-                        <div 
-                          className="usp-sidebar-tooltip usp-sidebar-tooltip-right"
-                          style={{ top: `${tooltipPos.top}px`, left: `${tooltipPos.left}px` }}
-                        >
-                          <div className="usp-sidebar-tooltip-content">
-                            <strong>{objection.title}</strong>
-                            <p><strong>Antwort:</strong> {objection.response}</p>
+            {displayObjections.length > 0 ? (
+              <>
+                <div className="usp-sidebar-list">
+                  {displayObjections.map((objection, idx) => {
+                    const objectionId = `objection-${idx}`
+                    const isHovered = hoveredUSP === objectionId
+                    return (
+                      <div
+                        key={objectionId}
+                        className="usp-sidebar-item"
+                        onMouseEnter={(e) => {
+                          const updatePos = () => {
+                            const rect = e.currentTarget.getBoundingClientRect()
+                            setTooltipPos({
+                              top: rect.top,
+                              left: rect.left - 310
+                            })
+                          }
+                          setHoveredUSP(objectionId)
+                          updatePos()
+                          const handleScroll = () => updatePos()
+                          window.addEventListener('scroll', handleScroll, true)
+                          e.currentTarget._scrollHandler = handleScroll
+                        }}
+                        onMouseMove={(e) => {
+                          if (hoveredUSP === objectionId) {
+                            const rect = e.currentTarget.getBoundingClientRect()
+                            setTooltipPos({
+                              top: rect.top,
+                              left: rect.left - 310
+                            })
+                          }
+                        }}
+                        onMouseLeave={(e) => {
+                          setHoveredUSP(null)
+                          if (e.currentTarget._scrollHandler) {
+                            window.removeEventListener('scroll', e.currentTarget._scrollHandler, true)
+                            delete e.currentTarget._scrollHandler
+                          }
+                        }}
+                      >
+                        <div className="usp-sidebar-title">{objection.title}</div>
+                        {isHovered && (
+                          <div 
+                            className="usp-sidebar-tooltip usp-sidebar-tooltip-right"
+                            style={{ top: `${tooltipPos.top}px`, left: `${tooltipPos.left}px` }}
+                          >
+                            <div className="usp-sidebar-tooltip-content">
+                              <strong>{objection.title}</strong>
+                              <p><strong>Antwort:</strong> {objection.response}</p>
+                            </div>
                           </div>
-                        </div>
-                      )}
-                    </div>
-                  )
-                })}
-              </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+                {objectionsArePreviewOnly && (
+                  <p className="usp-sidebar-empty" style={{ marginTop: '0.65rem', fontSize: '0.82rem', lineHeight: 1.4 }}>
+                    Nur Vorschau aus den USPs. Speichern und bearbeiten im Leitfaden-Generator („USPs &amp; Einwände bearbeiten“).
+                  </p>
+                )}
+              </>
             ) : (
               <p className="usp-sidebar-empty">Keine Einwände verfügbar</p>
             )}
@@ -6181,7 +6365,7 @@ function MeineLeitfaeden() {
                 </p>
               </div>
               <div className="meine-leitfaeden-item-actions">
-                <button className="btn btn-outline" onClick={() => setSelectedGuide(guide)}>
+                <button className="btn btn-outline" onClick={() => { setSelectedGuideIsSharedPreview(false); setSelectedGuide(guide); }}>
                   Anzeigen
                 </button>
                 <NavLink to={`/leitfaden/generator?edit=${guide.id}`} className="btn btn-outline">
@@ -6214,7 +6398,7 @@ function MeineLeitfaeden() {
       {isThomasBoeke && (
         <div className="content-section" style={{ marginTop: '2rem' }}>
           <h3>Geteilte Leitfäden (Intern)</h3>
-          <p>Leitfäden, die von Kollegen mit @thomas-boeke.com geteilt wurden. Kopie übernimmt den Leitfaden in deine Liste.</p>
+          <p>Leitfäden, die von Kollegen mit @thomas-boeke.com geteilt wurden. „Direkt ansehen“ öffnet nur die Ansicht; „Kopie zu mir“ legt eine eigene Kopie an.</p>
           {loadingSharedGuides ? (
             <p>Lade …</p>
           ) : sharedGuides.length === 0 ? (
@@ -6222,9 +6406,15 @@ function MeineLeitfaeden() {
           ) : (
             <ul style={{ listStyle: 'none', padding: 0 }}>
               {sharedGuides.map(g => (
-                <li key={g.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.75rem 0', borderBottom: '1px solid #eee' }}>
+                <li key={g.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', padding: '0.75rem 0', borderBottom: '1px solid #eee' }}>
                   <span><strong>{g.title}</strong></span>
-                  <button type="button" className="btn btn-primary btn-sm" onClick={() => handleCopySharedGuideToMe(g)}>Kopie zu mir</button>
+                  <span style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                    <button type="button" className="btn btn-outline btn-sm" onClick={() => openSharedGuidePreview(g)}>Direkt ansehen</button>
+                    <button type="button" className="btn btn-primary btn-sm" onClick={() => handleCopySharedGuideToMe(g)}>Kopie zu mir</button>
+                    {canDeleteSharedGuideRow(g) && (
+                      <button type="button" className="btn btn-danger btn-sm" onClick={() => handleDeleteSharedGuideEntry(g.id)}>Aus Pool löschen</button>
+                    )}
+                  </span>
                 </li>
               ))}
             </ul>
@@ -6237,6 +6427,8 @@ function MeineLeitfaeden() {
 
 function InternSharedPage() {
   const { user, setShowAuthModal } = useAuth()
+  const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
   const showToast = useToast()
   const [formulations, setFormulations] = React.useState([])
   const [sharedGuides, setSharedGuides] = React.useState([])
@@ -6244,12 +6436,28 @@ function InternSharedPage() {
   const [loadingFormulations, setLoadingFormulations] = React.useState(true)
   const [loadingGuides, setLoadingGuides] = React.useState(true)
   const [loadingMyGuides, setLoadingMyGuides] = React.useState(true)
-  const [activeTab, setActiveTab] = React.useState('formulations')
+
+  const activeTab = React.useMemo(() => {
+    const t = (searchParams.get('tab') || '').toLowerCase()
+    if (t === 'guides' || t === 'leitfaeden') return 'guides'
+    if (t === 'scenarios' || t === 'szenarien') return 'scenarios'
+    return 'formulations'
+  }, [searchParams])
+
+  const setActiveTab = React.useCallback((tab) => {
+    if (tab === 'formulations') setSearchParams({}, { replace: true })
+    else setSearchParams({ tab }, { replace: true })
+  }, [setSearchParams])
   const [newChapterId, setNewChapterId] = React.useState('begruessung')
   const [newFormulationText, setNewFormulationText] = React.useState('')
   const [shareGuideId, setShareGuideId] = React.useState('')
 
   const isThomasBoeke = user?.email?.toLowerCase().endsWith('@thomas-boeke.com')
+  const canModerateSharedIntern = isSharedThomasBoekeModerator(user?.email)
+  const canDeleteSharedGuideRow = (g) =>
+    canModerateSharedIntern || String(g.shared_by) === String(user?.id)
+  const canDeleteFormulationRow = (f) =>
+    canModerateSharedIntern || String(f.created_by) === String(user?.id)
 
   const loadFormulations = React.useCallback(() => {
     if (!isThomasBoeke) return
@@ -6367,6 +6575,22 @@ function InternSharedPage() {
     }
   }
 
+  const handleDeleteSharedGuide = async (id) => {
+    if (!window.confirm('Diesen geteilten Leitfaden aus dem Intern-Pool entfernen?')) return
+    try {
+      const res = await apiFetch(`/api/shared/guides/${id}`, { method: 'DELETE' })
+      if (res.ok) {
+        loadSharedGuides()
+        showToast('Geteilter Leitfaden entfernt', 'success')
+      } else {
+        const d = await res.json().catch(() => ({}))
+        showToast(d.error || 'Löschen fehlgeschlagen', 'error')
+      }
+    } catch (e) {
+      showToast('Fehler beim Löschen', 'error')
+    }
+  }
+
   if (!user) {
     return (
       <div className="page-container">
@@ -6394,11 +6618,12 @@ function InternSharedPage() {
     <div className="page-container">
       <div className="section-header">
         <h2>Intern</h2>
-        <p>Gemeinsame Formulierungen und geteilte Leitfäden für @thomas-boeke.com.</p>
+        <p>Gemeinsame Formulierungen, geteilte Leitfäden und Verkaufsszenarien für @thomas-boeke.com.</p>
       </div>
-      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem' }}>
+      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
         <button type="button" className={`btn ${activeTab === 'formulations' ? 'btn-primary' : 'btn-outline'}`} onClick={() => setActiveTab('formulations')}>Formulierungen</button>
         <button type="button" className={`btn ${activeTab === 'guides' ? 'btn-primary' : 'btn-outline'}`} onClick={() => setActiveTab('guides')}>Leitfäden</button>
+        <button type="button" className={`btn ${activeTab === 'scenarios' ? 'btn-primary' : 'btn-outline'}`} onClick={() => setActiveTab('scenarios')}>Szenarien</button>
       </div>
 
       {activeTab === 'formulations' && (
@@ -6422,7 +6647,7 @@ function InternSharedPage() {
               {formulations.map(f => (
                 <li key={f.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.5rem 0', borderBottom: '1px solid #eee' }}>
                   <span><strong>{LEITFADEN_CHAPTER_TITLES[f.chapter_id] || f.chapter_id}:</strong> {f.text}</span>
-                  {String(f.created_by) === String(user?.id) && (
+                  {canDeleteFormulationRow(f) && (
                     <button type="button" className="btn btn-outline btn-sm" onClick={() => handleDeleteFormulation(f.id)} aria-label="Löschen">Löschen</button>
                   )}
                 </li>
@@ -6446,17 +6671,30 @@ function InternSharedPage() {
             <button type="button" className="btn" onClick={handleShareGuide} disabled={!shareGuideId}>Teilen</button>
           </div>
           <h3>Geteilte Leitfäden</h3>
+          <p style={{ color: '#a0aec0', marginBottom: '0.75rem' }}>„Direkt ansehen“ öffnet den Leitfaden nur zur Ansicht (ohne Kopie). „Kopie in meine Leitfäden“ legt eine eigene Kopie an.</p>
           {loadingGuides ? <p>Lade …</p> : (
             <ul style={{ listStyle: 'none', padding: 0 }}>
               {sharedGuides.map(g => (
-                <li key={g.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.75rem 0', borderBottom: '1px solid #eee' }}>
+                <li key={g.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap', padding: '0.75rem 0', borderBottom: '1px solid #eee' }}>
                   <span><strong>{g.title}</strong></span>
-                  <button type="button" className="btn btn-primary btn-sm" onClick={() => handleCopyGuideToMe(g)}>Kopie in meine Leitfäden</button>
+                  <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                    <button type="button" className="btn btn-outline btn-sm" onClick={() => navigate('/leitfaden/meine', { state: { sharedPreview: g } })}>Direkt ansehen</button>
+                    <button type="button" className="btn btn-primary btn-sm" onClick={() => handleCopyGuideToMe(g)}>Kopie in meine Leitfäden</button>
+                    {canDeleteSharedGuideRow(g) && (
+                      <button type="button" className="btn btn-danger btn-sm" onClick={() => handleDeleteSharedGuide(g.id)}>Aus Pool löschen</button>
+                    )}
+                  </div>
                 </li>
               ))}
               {sharedGuides.length === 0 && <li style={{ color: '#666' }}>Noch keine geteilten Leitfäden.</li>}
             </ul>
           )}
+        </div>
+      )}
+
+      {activeTab === 'scenarios' && (
+        <div className="content-section">
+          <Scenarios embedded />
         </div>
       )}
     </div>
@@ -6832,7 +7070,7 @@ export default function App() {
           <Route path="/" element={<Home />} />
           <Route path="/training" element={<Training />} />
           <Route path="/practice" element={<Practice />} />
-          <Route path="/scenarios" element={<Scenarios />} />
+          <Route path="/scenarios" element={<Navigate to="/intern?tab=szenarien" replace />} />
           <Route path="/progress" element={<Progress />} />
           <Route path="/intern" element={<InternSharedPage />} />
           <Route path="/leitfaden" element={<LeitfadenOverview />} />

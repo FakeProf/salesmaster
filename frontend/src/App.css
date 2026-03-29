@@ -182,6 +182,10 @@ body {
     background: rgba(74, 85, 104, 0.5);
     transform: none;
   }
+
+  .nav-tab:hover:not(.active) {
+    animation: none;
+  }
 }
 
 .hamburger-icon {
@@ -214,6 +218,7 @@ body {
 }
 
 .nav-tab {
+  position: relative;
   padding: 0.8rem 1.5rem;
   text-decoration: none;
   color: #a0aec0;
@@ -228,6 +233,10 @@ body {
   color: #e2e8f0;
   transform: translateY(-2px);
   box-shadow: 0 4px 15px rgba(74, 85, 104, 0.3);
+}
+
+.nav-tab:hover:not(.active) {
+  animation: btn-bg-shift-nav-tab 0.28s ease-out 0.85s forwards;
 }
 
 /* Header Auth */
@@ -322,6 +331,7 @@ body {
   text-decoration: none;
   cursor: pointer;
   transition: background 0.2s;
+  position: relative;
 }
 
 .header-user-menu-item:hover {
@@ -339,6 +349,7 @@ body {
   background: rgba(229, 62, 62, 0.15);
 }
 .btn-auth {
+  position: relative;
   padding: 0.5rem 1rem;
   background: linear-gradient(135deg, #4a5568, #2d3748);
   color: #e2e8f0;
@@ -360,6 +371,7 @@ body {
 .btn-auth:hover {
   background: linear-gradient(135deg, #5a6578, #3d4858);
   border-color: #5a6578;
+  animation: btn-bg-shift-auth 0.28s ease-out 0.85s forwards;
 }
 /* Auth Modal (E-Mail/Passwort) */
 .auth-modal-overlay {
@@ -436,6 +448,7 @@ body {
   margin-bottom: 1.25rem;
 }
 .auth-modal-tabs button {
+  position: relative;
   flex: 1;
   padding: 0.5rem 1rem;
   background: #4a5568;
@@ -448,6 +461,11 @@ body {
 .auth-modal-tabs button.active {
   background: #81c784;
   color: #1a202c;
+}
+
+.auth-modal-tabs button:not(.active):hover {
+  color: #e2e8f0;
+  animation: btn-bg-shift-auth-tab 0.28s ease-out 0.85s forwards;
 }
 .auth-modal-error {
   background: rgba(229, 62, 62, 0.2);
@@ -635,6 +653,7 @@ body {
 
 /* Buttons */
 .btn {
+  position: relative;
   background: linear-gradient(135deg, #4a5568, #2d3748);
   color: #e2e8f0;
   border: 1px solid rgba(74, 85, 104, 0.5);
@@ -661,7 +680,11 @@ body {
 .btn:hover {
   transform: translateY(-2px);
   box-shadow: 0 8px 25px rgba(74, 85, 104, 0.4);
+}
+
+.btn:not(:disabled):not([disabled]):not(.btn-primary):not(.btn-outline):hover {
   background: linear-gradient(135deg, #5a6578, #3d4752);
+  animation: btn-bg-shift-neutral 0.28s ease-out 0.85s forwards;
 }
 
 .btn.active {
@@ -669,11 +692,265 @@ body {
 }
 
 .btn.primary {
-  background: linear-gradient(135deg, #667eea, #764ba2);
+  background: linear-gradient(135deg, #8fd694, #5aad61);
+  border-color: rgba(129, 199, 132, 0.85);
+  color: #fff;
+}
+
+.btn.primary:hover {
+  background: linear-gradient(135deg, #a3e0a8, #6ebf73);
+  border-color: rgba(160, 220, 163, 1);
+  animation: btn-bg-shift-primary 0.28s ease-out 0.85s forwards;
 }
 
 .btn.secondary {
   background: linear-gradient(135deg, #6c757d, #495057);
+}
+
+/* Varianten (werden überall mit .btn kombiniert, z. B. className="btn btn-primary") */
+.btn-sm {
+  padding: 0.45rem 1rem;
+  min-height: 36px;
+  font-size: 0.875rem;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, #8fd694, #5aad61);
+  border-color: rgba(129, 199, 132, 0.9);
+  color: #fff;
+}
+
+.btn-primary:hover {
+  background: linear-gradient(135deg, #a3e0a8, #6ebf73);
+  border-color: rgba(160, 220, 163, 1);
+  animation: btn-bg-shift-primary 0.28s ease-out 0.85s forwards;
+}
+
+.btn-outline {
+  background: rgba(26, 32, 44, 0.45);
+  color: #e2e8f0;
+  border: 1px solid rgba(129, 199, 132, 0.6);
+}
+
+.btn-outline:hover {
+  background: rgba(129, 199, 132, 0.14);
+  border-color: rgba(129, 199, 132, 0.9);
+  animation: btn-bg-shift-outline 0.28s ease-out 0.85s forwards;
+}
+
+/* Registrierter Winkel: Farbverlauf wandert am Rand, ohne die ::after-Fläche per transform zu drehen */
+@property --btn-orbit-angle {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
+}
+
+/* Rand: einmal um den Button, danach Ring ausblenden */
+@keyframes btn-green-border-sweep-once {
+  0% {
+    --btn-orbit-angle: 0deg;
+    opacity: 1;
+  }
+  86% {
+    opacity: 1;
+  }
+  100% {
+    --btn-orbit-angle: 360deg;
+    opacity: 0;
+  }
+}
+
+/* Nach dem Lauf: Hintergrund einen Hauch grüner (verzögert, damit es nach dem Ring kommt) */
+@keyframes btn-bg-shift-neutral {
+  0% {
+    background: linear-gradient(135deg, #5a6578, #3d4752);
+  }
+  100% {
+    background: linear-gradient(135deg, #5d6f7a, #3d5248);
+  }
+}
+
+@keyframes btn-bg-shift-primary {
+  0% {
+    background: linear-gradient(135deg, #a3e0a8, #6ebf73);
+    border-color: rgba(160, 220, 163, 1);
+  }
+  100% {
+    background: linear-gradient(135deg, #b0e8b6, #74c87a);
+    border-color: rgba(175, 230, 185, 1);
+  }
+}
+
+@keyframes btn-bg-shift-outline {
+  0% {
+    background: rgba(129, 199, 132, 0.14);
+    border-color: rgba(129, 199, 132, 0.9);
+  }
+  100% {
+    background: rgba(129, 199, 132, 0.24);
+    border-color: rgba(160, 220, 163, 1);
+  }
+}
+
+@keyframes btn-bg-shift-nav-tab {
+  0% {
+    background: linear-gradient(135deg, #4a5568, #2d3748);
+  }
+  100% {
+    background: linear-gradient(135deg, #4d5d58, #2d3f38);
+  }
+}
+
+@keyframes btn-bg-shift-auth {
+  0% {
+    background: linear-gradient(135deg, #5a6578, #3d4858);
+    border-color: #5a6578;
+  }
+  100% {
+    background: linear-gradient(135deg, #5c6d6e, #3d5048);
+    border-color: #5f7068;
+  }
+}
+
+@keyframes btn-bg-shift-close {
+  0% {
+    background: #5a6578;
+  }
+  100% {
+    background: #5c6a62;
+  }
+}
+
+@keyframes btn-bg-shift-back {
+  0% {
+    background: rgba(74, 85, 104, 0.7);
+  }
+  100% {
+    background: rgba(82, 96, 92, 0.75);
+  }
+}
+
+@keyframes btn-bg-shift-option {
+  0% {
+    background: rgba(74, 85, 104, 0.6);
+  }
+  100% {
+    background: rgba(78, 92, 88, 0.65);
+  }
+}
+
+@keyframes btn-bg-shift-menu-item {
+  0% {
+    background: rgba(74, 85, 104, 0.5);
+  }
+  100% {
+    background: rgba(78, 92, 88, 0.55);
+  }
+}
+
+@keyframes btn-bg-shift-auth-tab {
+  0% {
+    background: #4a5568;
+  }
+  100% {
+    background: #4d5752;
+  }
+}
+
+.btn:not(:disabled):not([disabled])::after,
+.btn-auth::after,
+.nav-tab::after,
+.close-btn::after,
+.option-btn:not(:disabled)::after,
+.btn-back::after,
+.auth-modal-close::after,
+.auth-modal-tabs button::after,
+.header-user-menu-item::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 2px;
+  box-sizing: border-box;
+  --btn-orbit-angle: 0deg;
+  background: conic-gradient(
+    from var(--btn-orbit-angle),
+    rgba(129, 199, 132, 0) 0deg,
+    rgba(129, 199, 132, 0) 275deg,
+    rgba(129, 199, 132, 0.95) 315deg,
+    #a7f3d0 330deg,
+    rgba(129, 199, 132, 0.95) 345deg,
+    rgba(129, 199, 132, 0) 360deg
+  );
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  pointer-events: none;
+  z-index: 2;
+  opacity: 0;
+}
+
+.btn:not(:disabled):not([disabled]):hover::after,
+.btn-auth:hover::after,
+.nav-tab:hover::after,
+.close-btn:hover::after,
+.option-btn:not(:disabled):hover::after,
+.btn-back:hover::after,
+.auth-modal-close:hover::after,
+.auth-modal-tabs button:hover::after,
+.header-user-menu-item:hover::after {
+  opacity: 1;
+  animation: btn-green-border-sweep-once 0.85s linear forwards;
+}
+
+.btn:not(:disabled):not([disabled]):not(:hover)::after,
+.btn-auth:not(:hover)::after,
+.nav-tab:not(:hover)::after,
+.close-btn:not(:hover)::after,
+.option-btn:not(:disabled):not(:hover)::after,
+.btn-back:not(:hover)::after,
+.auth-modal-close:not(:hover)::after,
+.auth-modal-tabs button:not(:hover)::after,
+.header-user-menu-item:not(:hover)::after {
+  animation: none;
+  opacity: 0;
+  --btn-orbit-angle: 0deg;
+}
+
+.header-user-menu-logout::after {
+  display: none !important;
+}
+
+.footer-section .nav-tab::after {
+  display: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .btn::after,
+  .btn-auth::after,
+  .nav-tab::after,
+  .close-btn::after,
+  .option-btn::after,
+  .btn-back::after,
+  .auth-modal-close::after,
+  .auth-modal-tabs button::after,
+  .header-user-menu-item::after {
+    display: none;
+  }
+
+  .btn:not(:disabled):not([disabled]):not(.btn-primary):not(.btn-outline):hover,
+  .btn-primary:hover,
+  .btn-outline:hover,
+  .nav-tab:hover:not(.active),
+  .btn-auth:hover,
+  .close-btn:hover,
+  .btn-back:hover,
+  .option-btn:hover:not(:disabled),
+  .header-user-menu-item:hover,
+  .auth-modal-tabs button:not(.active):hover {
+    animation: none !important;
+  }
 }
 
 /* Practice Page */
@@ -751,6 +1028,14 @@ body {
   .scenarios-container {
     padding: 1rem;
   }
+}
+
+.scenarios-container.scenarios-container--intern {
+  padding: 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  border-radius: 0;
 }
 
 .industry-filters {
@@ -903,6 +1188,7 @@ body {
 }
 
 .close-btn {
+  position: relative;
   background: #4a5568;
   border: none;
   border-radius: 50%;
@@ -918,6 +1204,7 @@ body {
 
 .close-btn:hover {
   background: #5a6578;
+  animation: btn-bg-shift-close 0.28s ease-out 0.85s forwards;
 }
 
 .scenario-details {
@@ -1596,8 +1883,14 @@ body {
   box-shadow: none;
 }
 
+.btn:disabled::after,
+.btn[disabled]::after {
+  display: none;
+}
+
 /* Training Question Styles */
 .btn-back {
+  position: relative;
   background: rgba(74, 85, 104, 0.5);
   color: #a0aec0;
   border: 1px solid rgba(74, 85, 104, 0.5);
@@ -1623,6 +1916,7 @@ body {
   background: rgba(74, 85, 104, 0.7);
   color: #e2e8f0;
   transform: translateX(-3px);
+  animation: btn-bg-shift-back 0.28s ease-out 0.85s forwards;
 }
 
 .topics-grid {
@@ -1727,6 +2021,7 @@ body {
 }
 
 .option-btn {
+  position: relative;
   background: rgba(45, 55, 72, 0.8);
   color: #e2e8f0;
   border: 2px solid rgba(74, 85, 104, 0.5);
@@ -1754,11 +2049,12 @@ body {
   background: rgba(74, 85, 104, 0.6);
   border-color: #81c784;
   transform: translateX(5px);
+  animation: btn-bg-shift-option 0.28s ease-out 0.85s forwards;
 }
 
 .option-btn.selected {
-  border-color: #667eea;
-  background: rgba(102, 126, 234, 0.2);
+  border-color: #81c784;
+  background: rgba(129, 199, 132, 0.2);
 }
 
 .option-btn.correct {
@@ -2457,11 +2753,11 @@ body {
   padding: 1.5rem;
   border-radius: 8px;
   margin-bottom: 2rem;
-  border-left: 4px solid #667eea;
+  border-left: 4px solid #81c784;
 }
 
 .story-section h3 {
-  color: #667eea;
+  color: #81c784;
   margin-bottom: 1rem;
 }
 
@@ -3454,12 +3750,46 @@ body {
   flex-wrap: wrap;
 }
 
+/* Leitfaden-Generator: Aktionen direkt unter „Dein Leitfaden“, nicht unten an der Liste */
+.leitfaden-actions-top {
+  margin-top: 0;
+  margin-bottom: 1.25rem;
+  padding: 0.5rem 0.65rem;
+  background: rgba(26, 32, 44, 0.55);
+  border: 1px solid rgba(74, 85, 104, 0.4);
+  border-radius: 10px;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 0.35rem;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.leitfaden-actions-top .btn,
+.leitfaden-actions-top .btn.btn-sm {
+  flex: 0 0 auto;
+  padding: 0.26rem 0.45rem;
+  min-height: 28px;
+  font-size: 0.72rem;
+  line-height: 1.2;
+}
+
 @media (max-width: 480px) {
   .leitfaden-actions {
     flex-direction: column;
   }
 
   .leitfaden-actions .btn {
+    width: 100%;
+  }
+
+  .leitfaden-actions-top {
+    align-items: stretch;
+    flex-wrap: wrap;
+    overflow-x: visible;
+  }
+
+  .leitfaden-actions-top .btn {
     width: 100%;
   }
 }
@@ -3636,6 +3966,13 @@ body {
   flex-wrap: wrap;
 }
 
+.leitfaden-viewer-viewmode-toggle {
+  display: inline-flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
 @media (max-width: 480px) {
   .leitfaden-viewer-actions {
     flex-direction: column;
@@ -3691,6 +4028,32 @@ body {
   margin: 0 0 1rem 0;
   padding-bottom: 0.5rem;
   border-bottom: 1px solid rgba(74, 85, 104, 0.3);
+}
+
+.usp-sidebar-by-category {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.usp-sidebar-category {
+  margin-bottom: 1.1rem;
+}
+
+.usp-sidebar-category:last-child {
+  margin-bottom: 0;
+}
+
+.usp-sidebar-category-title {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #81c784;
+  margin: 0 0 0.45rem 0;
+  padding-bottom: 0.35rem;
+  line-height: 1.35;
+  border-bottom: 1px solid rgba(129, 199, 132, 0.35);
 }
 
 .usp-sidebar-list {

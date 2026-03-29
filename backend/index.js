@@ -144,6 +144,7 @@ async function initializeDatabase() {
       )
     `;
     await sql`ALTER TABLE user_guides ADD COLUMN IF NOT EXISTS bullets JSONB`;
+    await sql`ALTER TABLE user_guides ADD COLUMN IF NOT EXISTS objections JSONB`;
 
     await sql`
       CREATE TABLE IF NOT EXISTS shared_formulations (
@@ -165,6 +166,7 @@ async function initializeDatabase() {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `;
+    await sql`ALTER TABLE shared_guides ADD COLUMN IF NOT EXISTS objections JSONB`;
     console.log('Database tables initialized successfully');
   } catch (error) {
     console.log('Database initialization failed:', error.message);
@@ -176,6 +178,14 @@ function isThomasBoekeUser(req) {
   const email = req.session?.user?.email;
   if (!email || typeof email !== 'string') return false;
   return email.trim().toLowerCase().endsWith('@thomas-boeke.com');
+}
+
+/** Darf geteilte Intern-Inhalte löschen, die andere Nutzer angelegt haben (Moderation). */
+function canModerateSharedThomasBoekeContent(req) {
+  const email = req.session?.user?.email;
+  if (!email || typeof email !== 'string') return false;
+  const n = email.trim().toLowerCase();
+  return n === 'j.steiner@thomas-boeke.com';
 }
 
 // Database connection (using Neon)
@@ -1906,7 +1916,7 @@ app.get('/api/guides/me', async (req, res) => {
       return res.json({ guides: [] });
     }
     const guides = await sql`
-      SELECT id, title, items, usps, bullets, created_at, updated_at
+      SELECT id, title, items, usps, bullets, objections, created_at, updated_at
       FROM user_guides
       WHERE user_id = ${String(userId)}
       ORDER BY updated_at DESC
@@ -1917,6 +1927,7 @@ app.get('/api/guides/me', async (req, res) => {
       items: g.items,
       usps: g.usps,
       bullets: g.bullets,
+      objections: g.objections,
       createdAt: g.created_at,
       updatedAt: g.updated_at
     })) });
@@ -1935,14 +1946,15 @@ app.post('/api/guides', async (req, res) => {
     if (!sql) {
       return res.status(503).json({ error: 'Datenbank nicht verfügbar' });
     }
-    const { title, items, usps, bullets } = req.body;
+    const { title, items, usps, bullets, objections } = req.body;
     if (!title || !items || !Array.isArray(items)) {
       return res.status(400).json({ error: 'Titel und Items sind erforderlich' });
     }
+    const objectionsJson = Array.isArray(objections) && objections.length > 0 ? JSON.stringify(objections) : null;
     const result = await sql`
-      INSERT INTO user_guides (user_id, title, items, usps, bullets)
-      VALUES (${String(userId)}, ${title}, ${JSON.stringify(items)}, ${usps ? JSON.stringify(usps) : null}, ${bullets && Array.isArray(bullets) ? JSON.stringify(bullets) : null})
-      RETURNING id, title, items, usps, bullets, created_at, updated_at
+      INSERT INTO user_guides (user_id, title, items, usps, bullets, objections)
+      VALUES (${String(userId)}, ${title}, ${JSON.stringify(items)}, ${usps ? JSON.stringify(usps) : null}, ${bullets && Array.isArray(bullets) ? JSON.stringify(bullets) : null}, ${objectionsJson})
+      RETURNING id, title, items, usps, bullets, objections, created_at, updated_at
     `;
     res.json({ 
       success: true, 
@@ -1952,6 +1964,7 @@ app.post('/api/guides', async (req, res) => {
         items: result[0].items,
         usps: result[0].usps,
         bullets: result[0].bullets,
+        objections: result[0].objections,
         createdAt: result[0].created_at,
         updatedAt: result[0].updated_at
       }
@@ -1975,7 +1988,7 @@ app.put('/api/guides/:id', async (req, res) => {
     if (Number.isNaN(guideId)) {
       return res.status(400).json({ error: 'Ungültige Leitfaden-ID' });
     }
-    const { title, items, usps } = req.body;
+    const { title, items, usps, objections } = req.body;
     
     // Prüfen ob Leitfaden dem User gehört
     const existing = await sql`
@@ -1988,11 +2001,21 @@ app.put('/api/guides/:id', async (req, res) => {
       return res.status(403).json({ error: 'Keine Berechtigung' });
     }
     
-    const result = await sql`
+    const objectionsJson = objections === undefined
+      ? undefined
+      : (Array.isArray(objections) && objections.length > 0 ? JSON.stringify(objections) : null);
+    const result = objectionsJson === undefined
+      ? await sql`
       UPDATE user_guides
       SET title = ${title}, items = ${JSON.stringify(items)}, usps = ${usps ? JSON.stringify(usps) : null}, updated_at = CURRENT_TIMESTAMP
       WHERE id = ${guideId} AND user_id = ${String(userId)}
-      RETURNING id, title, items, usps, bullets, created_at, updated_at
+      RETURNING id, title, items, usps, bullets, objections, created_at, updated_at
+    `
+      : await sql`
+      UPDATE user_guides
+      SET title = ${title}, items = ${JSON.stringify(items)}, usps = ${usps ? JSON.stringify(usps) : null}, objections = ${objectionsJson}, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ${guideId} AND user_id = ${String(userId)}
+      RETURNING id, title, items, usps, bullets, objections, created_at, updated_at
     `;
     if (result.length === 0) {
       return res.status(404).json({ error: 'Leitfaden nicht gefunden' });
@@ -2005,6 +2028,7 @@ app.put('/api/guides/:id', async (req, res) => {
         items: result[0].items,
         usps: result[0].usps,
         bullets: result[0].bullets,
+        objections: result[0].objections,
         createdAt: result[0].created_at,
         updatedAt: result[0].updated_at
       }
@@ -2047,6 +2071,45 @@ app.patch('/api/guides/:id/bullets', async (req, res) => {
   } catch (error) {
     console.error('Error updating guide bullets:', error);
     res.status(500).json({ error: 'Fehler beim Speichern der Stichpunkte' });
+  }
+});
+
+app.patch('/api/guides/:id/objections', async (req, res) => {
+  try {
+    const userId = req.session?.user?.id;
+    if (!userId) return res.status(401).json({ error: 'Nicht angemeldet' });
+    if (!sql) return res.status(503).json({ error: 'Datenbank nicht verfügbar' });
+    const guideId = parseInt(req.params.id, 10);
+    if (Number.isNaN(guideId)) return res.status(400).json({ error: 'Ungültige Leitfaden-ID' });
+    const { objections } = req.body;
+    if (!Array.isArray(objections)) return res.status(400).json({ error: 'objections muss ein Array sein' });
+    const normalized = objections
+      .filter(o => o && (o.title || o.response))
+      .map(o => ({ title: String(o.title || '').trim() || 'Einwand', response: String(o.response || '').trim() }));
+    const existing = await sql`SELECT user_id FROM user_guides WHERE id = ${guideId}`;
+    if (!existing?.length) return res.status(404).json({ error: 'Leitfaden nicht gefunden' });
+    if (existing[0].user_id !== String(userId)) return res.status(403).json({ error: 'Keine Berechtigung' });
+    const result = await sql`
+      UPDATE user_guides SET objections = ${JSON.stringify(normalized)}, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ${guideId} AND user_id = ${String(userId)}
+      RETURNING id, title, items, usps, bullets, objections, created_at, updated_at
+    `;
+    res.json({
+      success: true,
+      guide: {
+        id: result[0].id,
+        title: result[0].title,
+        items: result[0].items,
+        usps: result[0].usps,
+        bullets: result[0].bullets,
+        objections: result[0].objections,
+        createdAt: result[0].created_at,
+        updatedAt: result[0].updated_at
+      }
+    });
+  } catch (error) {
+    console.error('Error updating guide objections:', error);
+    res.status(500).json({ error: 'Fehler beim Speichern der Einwände' });
   }
 });
 
@@ -2132,9 +2195,14 @@ app.delete('/api/shared/formulations/:id', async (req, res) => {
     if (!sql) return res.status(503).json({ error: 'Datenbank nicht verfügbar' });
     const id = parseInt(req.params.id, 10);
     if (Number.isNaN(id)) return res.status(400).json({ error: 'Ungültige ID' });
-    const result = await sql`
-      DELETE FROM shared_formulations WHERE id = ${id} AND created_by = ${String(userId)} RETURNING id
-    `;
+    let result;
+    if (canModerateSharedThomasBoekeContent(req)) {
+      result = await sql`DELETE FROM shared_formulations WHERE id = ${id} RETURNING id`;
+    } else {
+      result = await sql`
+        DELETE FROM shared_formulations WHERE id = ${id} AND created_by = ${String(userId)} RETURNING id
+      `;
+    }
     if (result.length === 0) return res.status(404).json({ error: 'Nicht gefunden oder keine Berechtigung' });
     res.json({ success: true });
   } catch (error) {
@@ -2150,7 +2218,7 @@ app.get('/api/shared/guides', async (req, res) => {
     if (!isThomasBoekeUser(req)) return res.status(403).json({ error: 'Nur für Firmen-Accounts (@thomas-boeke.com)' });
     if (!sql) return res.status(503).json({ error: 'Datenbank nicht verfügbar' });
     const rows = await sql`
-      SELECT id, title, items, usps, bullets, shared_by, created_at FROM shared_guides ORDER BY created_at DESC
+      SELECT id, title, items, usps, bullets, objections, shared_by, created_at FROM shared_guides ORDER BY created_at DESC
     `;
     res.json({ guides: rows });
   } catch (error) {
@@ -2169,19 +2237,19 @@ app.post('/api/shared/guides', async (req, res) => {
     let payload;
     if (guideId != null) {
       const existing = await sql`
-        SELECT id, title, items, usps, bullets FROM user_guides WHERE id = ${Number(guideId)} AND user_id = ${String(userId)}
+        SELECT id, title, items, usps, bullets, objections FROM user_guides WHERE id = ${Number(guideId)} AND user_id = ${String(userId)}
       `;
       if (!existing?.length) return res.status(404).json({ error: 'Leitfaden nicht gefunden' });
-      payload = { title: existing[0].title, items: existing[0].items, usps: existing[0].usps, bullets: existing[0].bullets };
+      payload = { title: existing[0].title, items: existing[0].items, usps: existing[0].usps, bullets: existing[0].bullets, objections: existing[0].objections };
     } else if (title && items && Array.isArray(items)) {
-      payload = { title, items, usps: usps || null, bullets: bullets || null };
+      payload = { title, items, usps: usps || null, bullets: bullets || null, objections: null };
     } else {
       return res.status(400).json({ error: 'guideId oder title+items erforderlich' });
     }
     const result = await sql`
-      INSERT INTO shared_guides (title, items, usps, bullets, shared_by)
-      VALUES (${payload.title}, ${JSON.stringify(payload.items)}, ${payload.usps ? JSON.stringify(payload.usps) : null}, ${payload.bullets ? JSON.stringify(payload.bullets) : null}, ${String(userId)})
-      RETURNING id, title, items, usps, bullets, shared_by, created_at
+      INSERT INTO shared_guides (title, items, usps, bullets, objections, shared_by)
+      VALUES (${payload.title}, ${JSON.stringify(payload.items)}, ${payload.usps ? JSON.stringify(payload.usps) : null}, ${payload.bullets ? JSON.stringify(payload.bullets) : null}, ${payload.objections ? JSON.stringify(payload.objections) : null}, ${String(userId)})
+      RETURNING id, title, items, usps, bullets, objections, shared_by, created_at
     `;
     res.status(201).json(result[0]);
   } catch (error) {
@@ -2198,9 +2266,14 @@ app.delete('/api/shared/guides/:id', async (req, res) => {
     if (!sql) return res.status(503).json({ error: 'Datenbank nicht verfügbar' });
     const id = parseInt(req.params.id, 10);
     if (Number.isNaN(id)) return res.status(400).json({ error: 'Ungültige ID' });
-    const result = await sql`
-      DELETE FROM shared_guides WHERE id = ${id} AND shared_by = ${String(userId)} RETURNING id
-    `;
+    let result;
+    if (canModerateSharedThomasBoekeContent(req)) {
+      result = await sql`DELETE FROM shared_guides WHERE id = ${id} RETURNING id`;
+    } else {
+      result = await sql`
+        DELETE FROM shared_guides WHERE id = ${id} AND shared_by = ${String(userId)} RETURNING id
+      `;
+    }
     if (result.length === 0) return res.status(404).json({ error: 'Nicht gefunden oder keine Berechtigung' });
     res.json({ success: true });
   } catch (error) {
