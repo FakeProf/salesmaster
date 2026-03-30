@@ -6433,7 +6433,7 @@ function MeineLeitfaeden() {
       {isThomasBoeke && (
         <div className="content-section" style={{ marginTop: '2rem' }}>
           <h3>Geteilte Leitfäden (Intern)</h3>
-          <p>Leitfäden, die im Rahmen der Thomas Böke Vertriebswege geteilt wurden. „Direkt ansehen“ öffnet nur die Ansicht; „Kopie zu mir“ legt eine eigene Kopie an.</p>
+          <p>Leitfäden, die im Rahmen der Thomas Böke Vertriebswege GmbH &amp; Co.KG geteilt wurden. „Direkt ansehen“ öffnet nur die Ansicht; „Kopie zu mir“ legt eine eigene Kopie an.</p>
           {loadingSharedGuides ? (
             <p>Lade …</p>
           ) : sharedGuides.length === 0 ? (
@@ -6643,7 +6643,7 @@ function InternSharedPage() {
       <div className="page-container">
         <div className="section-header">
           <h2>Intern</h2>
-          <p>Nur für Nutzer im Rahmen der Thomas Böke Vertriebswege.</p>
+          <p>Nur für Nutzer im Rahmen der Thomas Böke Vertriebswege GmbH &amp; Co.KG.</p>
         </div>
       </div>
     )
@@ -6653,7 +6653,7 @@ function InternSharedPage() {
     <div className="page-container">
       <div className="section-header">
         <h2>Intern</h2>
-        <p>Gemeinsame Formulierungen, geteilte Leitfäden und Verkaufsszenarien im Rahmen der Thomas Böke Vertriebswege.</p>
+        <p>Gemeinsame Formulierungen, geteilte Leitfäden und Verkaufsszenarien im Rahmen der Thomas Böke Vertriebswege GmbH &amp; Co.KG.</p>
       </div>
       <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
         <button type="button" className={`btn ${activeTab === 'formulations' ? 'btn-primary' : 'btn-outline'}`} onClick={() => setActiveTab('formulations')}>Formulierungen</button>
