@@ -202,32 +202,44 @@ function Home() {
     <div className="home-container">
       <div className="hero-section">
         <h2>Willkommen bei SalesMaster</h2>
-        <p>Verbessere deine Verkaufskünste mit interaktiven Übungen und realistischen Szenarien</p>
+        <p>Dein Hub für Vertriebs-Training, Leitfäden, E-Mail-Prüfung und realistische Praxis-Szenarien.</p>
       </div>
       
       <div className="training-grid">
         <div className="training-card">
           <h3><i className="fas fa-graduation-cap"></i> Vertriebs-Training</h3>
           <p>Lerne die Grundlagen des erfolgreichen Verkaufs. Einwandbehandlung, Fragetechniken, Verkaufspsychologie und Verkaufssprache.</p>
-          <button className="btn" onClick={() => window.location.href = '/training'}>Training starten</button>
+          <NavLink className="btn" to="/training">Training starten</NavLink>
         </div>
         
         <div className="training-card">
           <h3><i className="fas fa-dumbbell"></i> Übungsmodus</h3>
           <p>Teste dein Wissen mit Quiz-Fragen, Karteikarten und interaktiven Übungen.</p>
-          <button className="btn" onClick={() => window.location.href = '/practice'}>Jetzt üben</button>
+          <NavLink className="btn" to="/practice">Jetzt üben</NavLink>
         </div>
         
         <div className="training-card">
           <h3><i className="fas fa-theater-masks"></i> Verkaufsszenarien</h3>
           <p>Übe mit echten Verkaufssituationen aus verschiedenen Branchen und Zielgruppen.</p>
-          <button className="btn" onClick={() => { window.location.href = '/intern?tab=szenarien' }}>Szenarien erkunden</button>
+          <NavLink className="btn" to="/intern?tab=szenarien">Szenarien erkunden</NavLink>
         </div>
         
         <div className="training-card">
+          <h3><i className="fas fa-route"></i> Leitfaden</h3>
+          <p>Erstelle strukturierte Gesprächsleitfäden und verwalte deine Vorlagen – schnell, konsistent, wiederverwendbar.</p>
+          <NavLink className="btn" to="/leitfaden">Leitfaden öffnen</NavLink>
+        </div>
+
+        <div className="training-card">
+          <h3><i className="fas fa-envelope-open-text"></i> E-Mail-Prüfung</h3>
+          <p>Prüft per MX-Record, ob für eine angegebene E-Mail ein Mailserver existiert. Die Adresse wird nicht gespeichert; der Prefix vor dem @ wird nicht geprüft.</p>
+          <NavLink className="btn" to="/email-check">E-Mail prüfen</NavLink>
+        </div>
+
+        <div className="training-card">
           <h3><i className="fas fa-chart-line"></i> Fortschritt</h3>
           <p>Verfolge deine Lernreise, sammle Erfolge und erreiche neue Ziele.</p>
-          <button className="btn" onClick={() => window.location.href = '/progress'}>Fortschritt anzeigen</button>
+          <NavLink className="btn" to="/progress">Fortschritt anzeigen</NavLink>
         </div>
       </div>
     </div>
