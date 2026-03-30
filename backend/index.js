@@ -12,7 +12,7 @@ try {
 dotenv.config({ path: path.join(__dirname, '.env') });
 // Debug: Prüfe ob GROQ_API_KEY geladen wurde
 console.log('Environment check:', {
-  envFile: path.join(__dirname, '.env'),
+  envFile: path.join(__dirname,  '.env'),
   groqKeyExists: !!process.env.GROQ_API_KEY,
   groqKeyLength: process.env.GROQ_API_KEY ? process.env.GROQ_API_KEY.length : 0
 });
@@ -103,6 +103,17 @@ async function initializeDatabase() {
       )
     `;
 
+    // Übungsmodus: pro Nutzer und Kalendertag eine Markierung für den Lernstreak
+    await sql`
+      CREATE TABLE IF NOT EXISTS user_practice_days (
+        id SERIAL PRIMARY KEY,
+        user_id VARCHAR(255) NOT NULL,
+        day_date DATE NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(user_id, day_date)
+      )
+    `;
+
     await sql`
       CREATE TABLE IF NOT EXISTS user_question_stats (
         id SERIAL PRIMARY KEY,
@@ -186,6 +197,71 @@ function canModerateSharedThomasBoekeContent(req) {
   if (!email || typeof email !== 'string') return false;
   const n = email.trim().toLowerCase();
   return n === 'j.steiner@thomas-boeke.com';
+}
+
+function pad2(n) {
+  return String(n).padStart(2, '0');
+}
+
+function toLocalDayString(d) {
+  const year = d.getFullYear();
+  const month = pad2(d.getMonth() + 1);
+  const day = pad2(d.getDate());
+  return `${year}-${month}-${day}`;
+}
+
+// Woche beginnt Montag (lokal, mit Mitternacht)
+function getLocalWeekStart(d) {
+  const localMidnight = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const day = localMidnight.getDay(); // 0=Sonntag .. 6=Samstag
+  const diff = day === 0 ? -6 : 1 - day; // Montag diff=0, Sonntag diff=-6
+  localMidnight.setDate(localMidnight.getDate() + diff);
+  return localMidnight;
+}
+
+function dayStringToLocalDate(dayString) {
+  return new Date(`${dayString}T00:00:00`);
+}
+
+function computePracticeStreak(practiceDayDates, now = new Date()) {
+  const currentWeekStart = getLocalWeekStart(now);
+  const currentWeekStartKey = toLocalDayString(currentWeekStart);
+
+  const weekCount = new Map(); // weekStartKey -> number of distinct practice days
+
+  for (const ds of (practiceDayDates || [])) {
+    if (!ds) continue;
+    const dayDate = ds instanceof Date ? ds : dayStringToLocalDate(String(ds));
+    const ws = getLocalWeekStart(dayDate);
+    const key = toLocalDayString(ws);
+    weekCount.set(key, (weekCount.get(key) || 0) + 1);
+  }
+
+  const getWeekCount = (weekStartDate) => weekCount.get(toLocalDayString(weekStartDate)) || 0;
+
+  // Start mit aktueller Woche (auch wenn <3 Tage).
+  // Rückwärts: Streak läuft nur weiter, solange abgeschlossene Wochen >=3 Tage haben.
+  let streakDays = getWeekCount(currentWeekStart);
+
+  const maxWeeksToScan = 156; // ~3 Jahre
+  const weekCursor = new Date(currentWeekStart);
+  for (let i = 1; i <= maxWeeksToScan; i++) {
+    weekCursor.setDate(weekCursor.getDate() - 7);
+    const cnt = getWeekCount(weekCursor);
+    if (cnt >= 3) {
+      streakDays += cnt;
+    } else {
+      break;
+    }
+  }
+
+  const currentWeekPracticeDays = getWeekCount(currentWeekStart);
+  return {
+    streakDays,
+    currentWeekPracticeDays,
+    currentWeekSecured: currentWeekPracticeDays >= 3,
+    currentWeekStart: currentWeekStartKey,
+  };
 }
 
 // Database connection (using Neon)
@@ -1477,7 +1553,17 @@ app.get('/api/progress/me', async (req, res) => {
       return res.status(401).json({ error: 'Nicht angemeldet' });
     }
     if (!sql) {
-      return res.json({ progress: [], trainingActivity: [], totalScenarios: 0 });
+      return res.json({
+        progress: [],
+        trainingActivity: [],
+        totalScenarios: 0,
+        practiceStreak: {
+          streakDays: 0,
+          currentWeekPracticeDays: 0,
+          currentWeekSecured: false,
+          currentWeekStart: null,
+        },
+      });
     }
     const progress = await sql`
       SELECT s.id, s.title, s.industry, up.completed, up.score, up.completed_at
@@ -1494,10 +1580,28 @@ app.get('/api/progress/me', async (req, res) => {
     `;
     const scenarioCount = await sql`SELECT COUNT(*)::int AS c FROM scenarios`.catch(() => [{ c: 0 }]);
     const totalScenarios = (scenarioCount[0]?.c) ?? 0;
+
+    const currentWeekStart = getLocalWeekStart(new Date());
+    const lookbackDays = 365; // reicht für Streak-Berechnung in der Praxis
+    const minDate = new Date(currentWeekStart);
+    minDate.setDate(minDate.getDate() - lookbackDays);
+    const practiceDayRows = await sql`
+      SELECT day_date
+      FROM user_practice_days
+      WHERE user_id = ${String(userId)}
+        AND day_date >= ${toLocalDayString(minDate)}
+    `.catch(() => []);
+
+    const practiceStreak = computePracticeStreak(
+      (practiceDayRows || []).map(r => r.day_date),
+      new Date()
+    );
+
     res.json({
       progress: progress || [],
       trainingActivity: trainingActivity || [],
       totalScenarios,
+      practiceStreak,
     });
   } catch (error) {
     console.error('Error fetching progress:', error);
@@ -1579,6 +1683,32 @@ app.post('/api/training-complete', async (req, res) => {
   } catch (error) {
     console.error('Error saving training:', error);
     res.status(500).json({ error: 'Failed to save training' });
+  }
+});
+
+// Übungsmodus: einen Kalendertag als "gemacht" markieren (für Lernstreak)
+app.post('/api/practice/streak/mark', async (req, res) => {
+  try {
+    const userId = req.session?.user?.id;
+    if (!userId) {
+      return res.status(401).json({ error: 'Nicht angemeldet' });
+    }
+    if (!sql) {
+      return res.json({ success: true });
+    }
+
+    const dayDate = toLocalDayString(new Date());
+
+    await sql`
+      INSERT INTO user_practice_days (user_id, day_date)
+      VALUES (${String(userId)}, ${dayDate})
+      ON CONFLICT (user_id, day_date) DO NOTHING
+    `;
+
+    res.json({ success: true, dayDate });
+  } catch (error) {
+    console.error('Error marking practice streak day:', error);
+    res.status(500).json({ error: 'Failed to mark practice streak day' });
   }
 });
 

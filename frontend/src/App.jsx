@@ -1018,6 +1018,15 @@ function Practice() {
   const [challengeEvaluation, setChallengeEvaluation] = React.useState(null)
   const [evaluatingChallenge, setEvaluatingChallenge] = React.useState(false)
   const showToast = useToast()
+
+  // Lernstreak: pro Kalendertag genau einmal markieren
+  const markPracticeDay = React.useCallback(() => {
+    if (!user) return
+    apiFetch('/api/practice/streak/mark', {
+      method: 'POST',
+      body: JSON.stringify({}),
+    }).catch(() => {})
+  }, [user])
   
   // Mikro-Learning State
   const [microStoryIndex, setMicroStoryIndex] = React.useState(0)
@@ -3332,6 +3341,7 @@ function Practice() {
       setQuizAnswer(null)
     } else {
       setActiveMode(null)
+      markPracticeDay()
       showToast('Quiz abgeschlossen!', 'success')
     }
   }
@@ -3470,6 +3480,7 @@ function Practice() {
         setFlashcardRating(null)
       } else {
         setActiveMode(null)
+        markPracticeDay()
         showToast('Karteikarten durchgearbeitet!', 'success')
       }
     }, 1000)
@@ -3497,6 +3508,7 @@ function Practice() {
       setRoleplayAnswer(null)
     } else {
       setActiveMode(null)
+      markPracticeDay()
     }
   }
 
@@ -3612,6 +3624,7 @@ function Practice() {
       setChallengeTimer(timer)
     } else {
       setActiveMode(null)
+      markPracticeDay()
     }
   }
 
@@ -3647,6 +3660,7 @@ function Practice() {
       setMicroAnswer(null)
     } else {
       setActiveMode(null)
+      markPracticeDay()
     }
   }
 
@@ -5148,24 +5162,35 @@ function LeitfadenGenerator() {
       showToast('Keine USPs zum Speichern vorhanden', 'error')
       return
     }
-    
-    if (!currentGuideId) {
-      showToast('Bitte erst einen Leitfaden speichern, bevor Sie USPs speichern können', 'error')
-      return
-    }
 
     setSaving(true)
     try {
-      const res = await apiFetch(`/api/guides/${currentGuideId}`, {
-        method: 'PUT',
-        body: JSON.stringify({
-          title: saveTitle || 'Leitfaden',
-          items: guideItems,
-          usps: extractedUSPs
+      const payload = {
+        title: saveTitle || 'Leitfaden',
+        items: guideItems,
+        usps: extractedUSPs
+      }
+
+      let res
+      if (currentGuideId) {
+        res = await apiFetch(`/api/guides/${currentGuideId}`, {
+          method: 'PUT',
+          body: JSON.stringify(payload),
         })
-      })
+      } else {
+        // Neue Guideseite direkt mit USPs anlegen (Items dürfen auch leer sein)
+        res = await apiFetch('/api/guides', {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        })
+      }
 
       if (res.ok) {
+        const data = await res.json().catch(() => ({}))
+        if (!currentGuideId && data?.guide?.id) {
+          setCurrentGuideId(data.guide.id)
+          setSaveTitle(data.guide.title || payload.title)
+        }
         showToast('USPs gespeichert', 'success')
         setShowUSPExtractor(false)
       } else {
@@ -5686,11 +5711,9 @@ function LeitfadenGenerator() {
                   <button className="btn btn-primary" onClick={addUSPsToGuide}>
                     Alle USPs zu Leitfaden hinzufügen
                   </button>
-                  {currentGuideId && (
-                    <button className="btn btn-outline" onClick={saveUSPsOnly} disabled={saving}>
-                      {saving ? 'Speichere...' : 'USPs speichern (ohne zum Leitfaden hinzufügen)'}
-                    </button>
-                  )}
+                  <button className="btn btn-outline" onClick={saveUSPsOnly} disabled={saving}>
+                    {saving ? 'Speichere...' : 'USPs speichern (direkt in Leitfaden usps)'}
+                  </button>
                 </div>
               </div>
             )}
@@ -6410,7 +6433,7 @@ function MeineLeitfaeden() {
       {isThomasBoeke && (
         <div className="content-section" style={{ marginTop: '2rem' }}>
           <h3>Geteilte Leitfäden (Intern)</h3>
-          <p>Leitfäden, die von Kollegen mit @thomas-boeke.com geteilt wurden. „Direkt ansehen“ öffnet nur die Ansicht; „Kopie zu mir“ legt eine eigene Kopie an.</p>
+          <p>Leitfäden, die im Rahmen der Thomas Böke Vertriebswege geteilt wurden. „Direkt ansehen“ öffnet nur die Ansicht; „Kopie zu mir“ legt eine eigene Kopie an.</p>
           {loadingSharedGuides ? (
             <p>Lade …</p>
           ) : sharedGuides.length === 0 ? (
@@ -6620,7 +6643,7 @@ function InternSharedPage() {
       <div className="page-container">
         <div className="section-header">
           <h2>Intern</h2>
-          <p>Nur für Firmen-Accounts (@thomas-boeke.com).</p>
+          <p>Nur für Nutzer im Rahmen der Thomas Böke Vertriebswege.</p>
         </div>
       </div>
     )
@@ -6630,7 +6653,7 @@ function InternSharedPage() {
     <div className="page-container">
       <div className="section-header">
         <h2>Intern</h2>
-        <p>Gemeinsame Formulierungen, geteilte Leitfäden und Verkaufsszenarien für @thomas-boeke.com.</p>
+        <p>Gemeinsame Formulierungen, geteilte Leitfäden und Verkaufsszenarien im Rahmen der Thomas Böke Vertriebswege.</p>
       </div>
       <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
         <button type="button" className={`btn ${activeTab === 'formulations' ? 'btn-primary' : 'btn-outline'}`} onClick={() => setActiveTab('formulations')}>Formulierungen</button>
@@ -6716,6 +6739,8 @@ function InternSharedPage() {
 function Progress() {
   const { user, loading: authLoading, setShowAuthModal } = useAuth()
   const [progressData, setProgressData] = React.useState(null)
+  const [guidesCount, setGuidesCount] = React.useState(0)
+  const [hasExtractedUsps, setHasExtractedUsps] = React.useState(false)
   const [loading, setLoading] = React.useState(true)
 
   React.useEffect(() => {
@@ -6725,14 +6750,43 @@ function Progress() {
       return
     }
     setLoading(true)
-    apiFetch('/api/progress/me')
-      .then(r => r.ok ? r.json() : { progress: [], trainingActivity: [], totalScenarios: 0 })
-      .then(data => {
-        setProgressData(data)
+    const fallbackProgress = {
+      progress: [],
+      trainingActivity: [],
+      totalScenarios: 0,
+      practiceStreak: { streakDays: 0, currentWeekPracticeDays: 0, currentWeekSecured: false, currentWeekStart: null },
+    }
+    const fallbackGuides = { guides: [] }
+
+    Promise.all([
+      apiFetch('/api/progress/me')
+        .then(r => r.ok ? r.json() : fallbackProgress)
+        .catch(() => fallbackProgress),
+      apiFetch('/api/guides/me')
+        .then(r => r.ok ? r.json() : fallbackGuides)
+        .catch(() => fallbackGuides),
+    ])
+      .then(([p, g]) => {
+        setProgressData(p)
+        setGuidesCount((g?.guides || []).length)
+        const extracted = (g?.guides || []).some((guide) => {
+          const usps = guide?.usps
+          if (!usps) return false
+          if (Array.isArray(usps)) return usps.length > 0
+          if (typeof usps === 'object') {
+            // Erwartetes Format aus dem Leitfaden-Generator: { grundsaetzlich: [], gegenueberKonkurrenten: [], gegenueberAlterenMethoden: [] }
+            const values = Object.values(usps)
+            return values.some(v => Array.isArray(v) && v.length > 0)
+          }
+          return false
+        })
+        setHasExtractedUsps(extracted)
         setLoading(false)
       })
       .catch(() => {
-        setProgressData({ progress: [], trainingActivity: [], totalScenarios: 0 })
+        setProgressData(fallbackProgress)
+        setGuidesCount(0)
+        setHasExtractedUsps(false)
         setLoading(false)
       })
   }, [user])
@@ -6758,7 +6812,7 @@ function Progress() {
           <div className="progress-login-card">
             <div className="progress-login-icon">📊</div>
             <h3>Anmeldung erforderlich</h3>
-            <p>Hier siehst du, welche Trainings und Szenarien du abgeschlossen hast, wann du sie gemacht hast und welche Erfolge du freischalten kannst.</p>
+              <p>Hier siehst du, welche Trainings du abgeschlossen hast, wann du sie gemacht hast und welche Erfolge du freischalten kannst.</p>
             <button type="button" className="btn btn-primary" onClick={() => setShowAuthModal(true)}>
               Anmelden
             </button>
@@ -6770,29 +6824,23 @@ function Progress() {
 
   const progress = progressData?.progress || []
   const trainingActivity = progressData?.trainingActivity || []
-  const totalScenarios = Math.max(progressData?.totalScenarios ?? 0, 1)
+  const practiceStreak = progressData?.practiceStreak || { streakDays: 0, currentWeekPracticeDays: 0, currentWeekSecured: false, currentWeekStart: null }
   const completedScenarios = progress.filter(p => p.completed).length
   const completedTrainings = trainingActivity.length
   const totalXP = completedScenarios * 100 + completedTrainings * 50
   const level = Math.floor(totalXP / 500) + 1
   const trainingProgressPct = (completedTrainings / TOTAL_TRAINING_MODULES) * 100
-  const scenarioProgressPct = totalScenarios > 0 ? (completedScenarios / totalScenarios) * 100 : 0
 
   const achievements = [
     { id: 1, name: 'Erste Schritte', description: 'Erstes Training abgeschlossen', earned: completedTrainings >= 1 },
     { id: 2, name: 'Einwand-Profi', description: 'Einwandbehandlung-Training abgeschlossen', earned: trainingActivity.some(t => t.module_id === 'objection-handling') },
     { id: 3, name: 'Fragen-Meister', description: 'Fragetechniken-Training abgeschlossen', earned: trainingActivity.some(t => t.module_id === 'question-techniques') },
-    { id: 4, name: 'Szenario-Champion', description: 'Alle Szenarien durchgespielt', earned: totalScenarios > 0 && completedScenarios >= totalScenarios },
-    { id: 5, name: 'Vollständiger Lehrplan', description: 'Alle 4 Trainingsmodule abgeschlossen', earned: completedTrainings >= TOTAL_TRAINING_MODULES }
+    { id: 4, name: 'Erstelle deinen ersten Leitfaden', description: 'Erstelle deinen ersten Leitfaden im Leitfaden-Generator', earned: guidesCount >= 1 },
+    { id: 5, name: 'Extrahiere deine ersten USPs', description: 'Extrahiere dein erstes USP-Set aus einer Website im Leitfaden-Generator', earned: hasExtractedUsps },
+    { id: 6, name: 'Vollständiger Lehrplan', description: 'Alle 4 Trainingsmodule abgeschlossen', earned: completedTrainings >= TOTAL_TRAINING_MODULES }
   ]
 
   const recentActivity = [
-    ...progress.filter(p => p.completed_at).map(p => ({
-      at: new Date(p.completed_at).getTime(),
-      date: new Date(p.completed_at).toLocaleDateString('de-DE'),
-      activity: `${p.title || 'Szenario'} abgeschlossen`,
-      xp: (p.score || 0) || 100
-    })),
     ...trainingActivity.map(t => ({
       at: t.completed_at ? new Date(t.completed_at).getTime() : 0,
       date: t.completed_at ? new Date(t.completed_at).toLocaleDateString('de-DE') : '',
@@ -6824,10 +6872,14 @@ function Progress() {
           </div>
         </div>
         <div className="stat-card">
-          <div className="stat-icon">🎯</div>
+          <div className="stat-icon">🔥</div>
           <div className="stat-content">
-            <h3>{completedScenarios}/{totalScenarios}</h3>
-            <p>Szenarien gemeistert</p>
+            <h3>{practiceStreak.streakDays}</h3>
+            <p>Lernstreak (Tage)</p>
+            <p style={{ marginTop: '0.35rem' }}>
+              Woche: {practiceStreak.currentWeekPracticeDays}/3
+              {practiceStreak.currentWeekSecured ? ' gesichert' : ''}
+            </p>
           </div>
         </div>
       </div>
@@ -6839,13 +6891,6 @@ function Progress() {
             <div className="progress-fill" style={{ width: `${trainingProgressPct}%` }}></div>
           </div>
           <p>{completedTrainings} von {TOTAL_TRAINING_MODULES} Trainings abgeschlossen</p>
-        </div>
-        <div className="progress-section">
-          <h3>Szenario-Fortschritt</h3>
-          <div className="progress-bar">
-            <div className="progress-fill" style={{ width: `${scenarioProgressPct}%` }}></div>
-          </div>
-          <p>{completedScenarios} von {totalScenarios} Szenarien gemeistert</p>
         </div>
       </div>
 
@@ -6870,7 +6915,7 @@ function Progress() {
         <h3>Letzte Aktivitäten</h3>
         <div className="activity-list">
           {recentActivity.length === 0 ? (
-            <p className="activity-empty">Noch keine Aktivitäten. Starte ein Training oder ein Szenario!</p>
+            <p className="activity-empty">Noch keine Aktivitäten. Starte ein Training!</p>
           ) : (
             recentActivity.map((activity, idx) => (
             <div key={idx} className="activity-item">
