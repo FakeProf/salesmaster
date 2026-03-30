@@ -5002,11 +5002,11 @@ function LeitfadenGenerator() {
 
   const handleSave = async () => {
     if (!saveTitle.trim()) {
-      alert('Bitte gib einen Titel ein')
+      showToast('Bitte gib einen Titel ein', 'error')
       return
     }
     if (guideItems.length === 0) {
-      alert('Der Leitfaden ist leer')
+      showToast('Der Leitfaden ist leer', 'error')
       return
     }
     if (!user) {
@@ -5040,7 +5040,7 @@ function LeitfadenGenerator() {
       }
 
       if (res.ok) {
-        alert('Leitfaden gespeichert!')
+        showToast('Leitfaden gespeichert', 'success')
         setShowSaveModal(false)
         setSaveTitle('')
         if (navigate) {
@@ -5048,11 +5048,11 @@ function LeitfadenGenerator() {
         }
       } else {
         const error = await res.json().catch(() => ({}))
-        alert(`Fehler beim Speichern: ${error.error || 'Unbekannter Fehler'}`)
+        showToast(`Fehler beim Speichern: ${error.error || 'Unbekannter Fehler'}`, 'error')
       }
     } catch (error) {
       console.error('Fehler beim Speichern:', error)
-      alert('Fehler beim Speichern')
+      showToast('Fehler beim Speichern', 'error')
     } finally {
       setSaving(false)
     }
@@ -5390,10 +5390,16 @@ function LeitfadenGenerator() {
                         title="Klicken zum Bearbeiten"
                         dangerouslySetInnerHTML={{ __html: sanitizeHighlightHtml(item.text || '').replace(/\n/g, '<br>') || '&nbsp;' }}
                       />
-                      {item.custom && <span className="leitfaden-list-badge leitfaden-badge-eigen">eigen</span>}
-                      {!item.custom && item.chapterId && <span className="leitfaden-list-badge">{LEITFADEN_CHAPTER_TITLES[item.chapterId] || item.chapterId}</span>}
-                      <button type="button" className="leitfaden-edit" onClick={() => startEditing(item)} aria-label="Bearbeiten">✎</button>
-                      <button type="button" className="leitfaden-remove" onClick={() => removeFromGuide(idx)} aria-label="Entfernen">✕</button>
+                      <div className="leitfaden-item-actions">
+                        <div className="leitfaden-item-badges">
+                          {item.custom && <span className="leitfaden-list-badge leitfaden-badge-eigen">eigen</span>}
+                          {!item.custom && item.chapterId && <span className="leitfaden-list-badge">{LEITFADEN_CHAPTER_TITLES[item.chapterId] || item.chapterId}</span>}
+                        </div>
+                        <div className="leitfaden-item-buttons">
+                          <button type="button" className="leitfaden-edit" onClick={() => startEditing(item)} aria-label="Bearbeiten">✎</button>
+                          <button type="button" className="leitfaden-remove" onClick={() => removeFromGuide(idx)} aria-label="Entfernen">✕</button>
+                        </div>
+                      </div>
                     </>
                   )}
                 </li>
