@@ -58,6 +58,24 @@ function Layout({ children }) {
   const mobileMenuRef = React.useRef(null)
   const mobileMenuToggleRef = React.useRef(null)
 
+  const [theme, setTheme] = React.useState(() => {
+    try {
+      const saved = localStorage.getItem('theme')
+      if (saved === 'light' || saved === 'dark') return saved
+    } catch (_) {}
+    try {
+      return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+    } catch (_) {}
+    return 'dark'
+  })
+
+  React.useEffect(() => {
+    try {
+      document.documentElement.dataset.theme = theme
+      localStorage.setItem('theme', theme)
+    } catch (_) {}
+  }, [theme])
+
   useEffect(() => {
     if (searchParams.get('logged_in') === '1') {
       refreshUser()
@@ -125,6 +143,15 @@ function Layout({ children }) {
             <NavLink to="/email-check" className="nav-tab" onClick={() => setMobileMenuOpen(false)}>E-Mail-Prüfung</NavLink>
           </nav>
           <div className="header-auth">
+            <button
+              type="button"
+              className="theme-toggle"
+              onClick={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
+              aria-label={theme === 'dark' ? 'Light Mode aktivieren' : 'Dark Mode aktivieren'}
+              title={theme === 'dark' ? 'Light Mode' : 'Dark Mode'}
+            >
+              <span className="theme-toggle-icon" aria-hidden>{theme === 'dark' ? '☀' : '☾'}</span>
+            </button>
             {!loading && (
               user ? (
                 <div className="header-user-wrap" ref={userMenuRef}>
@@ -1027,6 +1054,27 @@ function Practice() {
       body: JSON.stringify({}),
     }).catch(() => {})
   }, [user])
+
+  const markPracticeEvent = React.useCallback((type) => {
+    if (!user) return
+    apiFetch('/api/practice/event', {
+      method: 'POST',
+      body: JSON.stringify({ type }),
+    }).catch(() => {})
+  }, [user])
+
+  const logPracticeActivity = React.useCallback((activityType) => {
+    if (!user || !activityType) return
+    apiFetch('/api/practice/activity', {
+      method: 'POST',
+      body: JSON.stringify({ type: activityType }),
+    }).catch(() => {})
+  }, [user])
+
+  const completePracticeMode = React.useCallback((activityType = null) => {
+    markPracticeDay()
+    if (activityType) logPracticeActivity(activityType)
+  }, [markPracticeDay, logPracticeActivity])
   
   // Mikro-Learning State
   const [microStoryIndex, setMicroStoryIndex] = React.useState(0)
@@ -1048,7 +1096,7 @@ function Practice() {
       {
         question: 'Ein Kunde sagt: "Ich muss erst noch darüber nachdenken." Was ist die beste Reaktion?',
         options: [
-          { text: '„Okay, melden Sie sich einfach irgendwann."', correct: false },
+          { text: '„Kein Problem – melden Sie sich einfach, wenn es passt. Ich lege keinen weiteren Termin fest und halte Sie nicht fest."', correct: false },
           { text: '„Das ist keine gute Idee."', correct: false },
           { text: '„Natürlich! Was genau möchten Sie sich noch überlegen?"', correct: true },
           { text: '„Dann rufe ich Sie in einem Jahr wieder an."', correct: false }
@@ -1060,7 +1108,7 @@ function Practice() {
         question: 'Wie behandelst du einen Vertrauens-Einwand am besten?',
         options: [
           { text: 'Referenzen, Fallbeispiele oder Kundenstimmen zeigen', correct: true },
-          { text: 'Das ignorieren und weiter präsentieren', correct: false },
+          { text: 'Das Thema kurz überspringen und mit der Präsentation fortfahren, damit der Ablauf nicht ins Stocken gerät', correct: false },
           { text: 'Den Preis senken, um Vertrauen zu schaffen', correct: false },
           { text: 'Den Kunden bitten, selbst im Internet zu recherchieren', correct: false }
         ],
@@ -1082,9 +1130,9 @@ function Practice() {
         question: 'Was ist der beste Umgang mit einem Konkurrenz-Einwand?',
         options: [
           { text: 'Verständnis zeigen und den Mehrwert deiner Lösung betonen', correct: true },
-          { text: 'Den Konkurrenten kritisieren', correct: false },
-          { text: 'Den Kunden überreden', correct: false },
-          { text: 'Den Einwand ignorieren', correct: false }
+          { text: 'Den Wettbewerber frontal diskreditieren, um die eigene Position zu stärken – ohne saubere Kriterien und ohne den Kunden mitzunehmen', correct: false },
+          { text: 'Mit erhöhtem Überzeugungsdruck und Wiederholungen argumentieren, statt Bedenken strukturiert zu klären', correct: false },
+          { text: 'Den Einwand bewusst ignorieren und beim ursprünglichen Pitch bleiben, um Zeit zu sparen', correct: false }
         ],
         feedback: 'Zeige Verständnis und fokussiere dich auf deine Stärken und den einzigartigen Mehrwert deiner Lösung.',
         difficulty: 'Mittel'
@@ -1094,8 +1142,8 @@ function Practice() {
         options: [
           { text: 'Den Preis sofort senken', correct: false },
           { text: 'Den Fokus auf den Mehrwert und den Nutzen legen', correct: true },
-          { text: 'Dem Kunden zustimmen, dass es teuer ist', correct: false },
-          { text: 'Über die Konkurrenz schlecht reden', correct: false }
+          { text: 'Dem Kunden voll zu stimmen, dass es teuer wirkt, ohne den Bezug zu Nutzen, Risiko und Zeit zu schließen', correct: false },
+          { text: 'Mit allgemeinen Vorwürfen gegenüber der Konkurrenz arbeiten, statt kundenindividuelle Kriterien zu schärfen', correct: false }
         ],
         feedback: 'Preis ist nur ein Faktor – der Wert ist entscheidend. Indem du den Fokus auf den Mehrwert legst, hilfst du dem Kunden, die Investition zu rechtfertigen.',
         difficulty: 'Mittel'
@@ -1103,10 +1151,10 @@ function Practice() {
       {
         question: 'Wie erkennst du, ob ein "Zeit-Einwand" echt ist?',
         options: [
-          { text: 'Indem du sofort einen Rabatt anbietest', correct: false },
-          { text: 'Du wartest einfach ab', correct: false },
+          { text: 'Indem du schnell mit Konditionen oder Zugaben reagierst, um den Zeit-Einwand „wegzukaufen“', correct: false },
+          { text: 'Du wartest passiv ab, ohne zu klären, ob es um Timing, Budget oder fehlende Information geht', correct: false },
           { text: 'Durch gezieltes Nachfragen, z. B. "Geht es um den Preis oder um etwas anderes?"', correct: true },
-          { text: 'Du gehst davon aus, dass der Kunde nicht interessiert ist', correct: false }
+          { text: 'Du interpretierst Zurückhaltung automatisch als Desinteresse, ohne die echten Blocker zu erfragen', correct: false }
         ],
         feedback: 'Die meisten "Zeit-Einwände" sind Scheinargumente. Durch gezieltes Nachfragen deckst du die wahren Bedenken auf.',
         difficulty: 'Mittel'
@@ -1136,7 +1184,7 @@ function Practice() {
       {
         question: 'Ein Kunde sagt: "Ich kenne Ihre Firma nicht." Was tust du am besten?',
         options: [
-          { text: 'Das ignorieren und weiter präsentieren', correct: false },
+          { text: 'Das Thema kurz überspringen und mit der Präsentation fortfahren, damit der Ablauf nicht ins Stocken gerät', correct: false },
           { text: 'Referenzen, Fallbeispiele oder Kundenstimmen zeigen', correct: true },
           { text: 'Den Kunden bitten, selbst im Internet zu recherchieren', correct: false },
           { text: 'Den Preis senken, um Vertrauen zu schaffen', correct: false }
@@ -1148,7 +1196,7 @@ function Practice() {
         question: 'Ein Kunde sagt: "Ich habe schon ein ähnliches Produkt." Wie reagierst du?',
         options: [
           { text: '„Was funktioniert bei Ihrer aktuellen Lösung gut und was nicht?"', correct: true },
-          { text: '„Dann brauchen Sie uns nicht."', correct: false },
+          { text: '„Verstanden. Wenn Sie das intern vollständig abdecken, ziehe ich mich zurück – dann spare ich uns beiden Zeit."', correct: false },
           { text: '„Ihre Lösung ist veraltet."', correct: false },
           { text: '„Dann können wir nichts für Sie tun."', correct: false }
         ],
@@ -1170,7 +1218,7 @@ function Practice() {
         question: 'Was ist die beste Reaktion auf "Ich muss das erst mit meinem Chef besprechen"?',
         options: [
           { text: '„Verstehe. Was genau möchte Ihr Chef wissen? Kann ich dabei sein?"', correct: true },
-          { text: '„Okay, melden Sie sich dann."', correct: false },
+          { text: '„Alles klar – dann melden Sie sich einfach, sobald es für Sie passt. Ich respektiere Ihre Entscheidungsfreiheit vollständig."', correct: false },
           { text: '„Dann ist das Gespräch beendet."', correct: false },
           { text: '„Ihr Chef wird schon zustimmen."', correct: false }
         ],
@@ -1183,7 +1231,7 @@ function Practice() {
           { text: '„Dann sind Sie nicht qualifiziert."', correct: false },
           { text: '„Das ist einfach."', correct: false },
           { text: '„Was genau erscheint Ihnen kompliziert? Lassen Sie uns das Schritt für Schritt durchgehen."', correct: true },
-          { text: '„Dann passt es nicht."', correct: false }
+          { text: '„Dann ist das voraussichtlich keine gute Passung – ich würde das Thema intern ablegen und Ressourcen nicht weiter binden."', correct: false }
         ],
         feedback: 'Komplexität ist oft ein Einwand gegen Veränderung. Zerlege die Lösung in verständliche Schritte.',
         difficulty: 'Mittel'
@@ -1202,7 +1250,7 @@ function Practice() {
       {
         question: 'Ein Kunde sagt: "Ihr Produkt hat zu viele Funktionen, die ich nicht brauche." Was tust du?',
         options: [
-          { text: '„Dann kaufen Sie es nicht."', correct: false },
+          { text: '„Alles klar – wenn der Mehrwert für Sie nicht erkennbar ist, macht ein Kauf keinen Sinn. Wir belassen es beim Status quo und dokumentieren den Stand."', correct: false },
           { text: '„Sie müssen alles nehmen."', correct: false },
           { text: '„Welche Funktionen sind für Sie am wichtigsten? Wir können auch eine schlankere Version anbieten."', correct: true },
           { text: '„Das ist unser Standard."', correct: false }
@@ -1213,10 +1261,10 @@ function Practice() {
       {
         question: 'Wie behandelst du einen Einwand, der auf einem Missverständnis basiert?',
         options: [
-          { text: 'Den Kunden korrigieren und weiter machen', correct: false },
-          { text: 'Den Einwand ignorieren', correct: false },
+          { text: 'Den Kunden schnell „richtigstellen“ und ohne Verbindlichkeit beim nächsten Argument weitermachen', correct: false },
+          { text: 'Den Einwand bewusst ignorieren und beim ursprünglichen Pitch bleiben, um Zeit zu sparen', correct: false },
           { text: 'Verständnis zeigen, dann die korrekte Information liefern', correct: true },
-          { text: 'Den Kunden kritisieren', correct: false }
+          { text: 'Den Kunden indirekt kritisieren („Sie verstehen das falsch“), statt gemeinsam Fakten und Kriterien zu klären', correct: false }
         ],
         feedback: 'Missverständnisse sind Chancen. Zeige Verständnis, dann kläre auf, ohne den Kunden zu beschämen.',
         difficulty: 'Mittel'
@@ -1224,10 +1272,10 @@ function Practice() {
       {
         question: 'Ein Kunde sagt: "Ich habe schlechte Erfahrungen mit ähnlichen Anbietern gemacht." Wie reagierst du?',
         options: [
-          { text: '„Wir sind anders."', correct: false },
+          { text: '„Wir unterscheiden uns klar vom Markt – unsere Kultur und unser Ansatz sind deutlich weniger bürokratisch als bei vielen klassischen Anbietern."', correct: false },
           { text: '„Das war nicht unsere Schuld."', correct: false },
           { text: '„Das tut mir leid. Was genau ist damals schiefgelaufen? So kann ich sicherstellen, dass wir das anders machen."', correct: true },
-          { text: '„Dann kaufen Sie es nicht."', correct: false }
+          { text: '„Alles klar – wenn der Mehrwert für Sie nicht erkennbar ist, macht ein Kauf keinen Sinn. Wir belassen es beim Status quo und dokumentieren den Stand."', correct: false }
         ],
         feedback: 'Negative Erfahrungen sind Bedenken. Zeige Empathie und lerne daraus, um Vertrauen aufzubauen.',
         difficulty: 'Schwer'
@@ -1236,9 +1284,9 @@ function Practice() {
         question: 'Was ist die beste Strategie bei einem wiederholten Einwand?',
         options: [
           { text: 'Den Einwand nochmal genauso beantworten', correct: false },
-          { text: 'Aufgeben', correct: false },
+          { text: 'Das Gespräch freundlich beenden, ohne nächsten Schritt, Termin oder klares Follow-up zu vereinbaren', correct: false },
           { text: 'Eine andere Perspektive wählen oder den ROI konkret berechnen', correct: true },
-          { text: 'Den Preis senken', correct: false }
+          { text: 'Sofort Rabatt oder Preisnachlass anboten, um den Einwand zu „entschärfen“, ohne Nutzen und Einordnung neu abzusichern', correct: false }
         ],
         feedback: 'Wenn ein Einwand wiederholt kommt, hat der Kunde den Wert noch nicht verstanden. Ändere deine Kommunikationsstrategie.',
         difficulty: 'Schwer'
@@ -1269,9 +1317,9 @@ function Practice() {
         question: 'Ein Kunde sagt: "Ihr Service ist nicht gut genug." Wie behandelst du das?',
         options: [
           { text: '„Doch, unser Service ist gut."', correct: false },
-          { text: '„Dann kaufen Sie es nicht."', correct: false },
+          { text: '„Alles klar – wenn der Mehrwert für Sie nicht erkennbar ist, macht ein Kauf keinen Sinn. Wir belassen es beim Status quo und dokumentieren den Stand."', correct: false },
           { text: '„Was genau erwarten Sie vom Service? Lassen Sie mich zeigen, wie wir das umsetzen."', correct: true },
-          { text: '„Das stimmt nicht."', correct: false }
+          { text: '„Das sehe ich anders – unsere Daten und Kundenfeedbacks sprechen eine deutlich stabilere Erwartungshaltung."', correct: false }
         ],
         feedback: 'Service-Bedenken sind konkret. Finde heraus, was genau erwartet wird, und zeige, wie du das erfüllst.',
         difficulty: 'Mittel'
@@ -1304,7 +1352,7 @@ function Practice() {
           { text: 'Den Einwand rational beantworten', correct: false },
           { text: 'Die Emotion ignorieren', correct: false },
           { text: 'Zuerst die Emotion anerkennen, dann sachlich antworten', correct: true },
-          { text: 'Gegenargumentieren', correct: false }
+          { text: 'Schnell mit Gegenargumenten kontern, bevor die emotionale Ebene ausreichend zur Kenntnis genommen wurde', correct: false }
         ],
         feedback: 'Emotionale Einwände brauchen zuerst emotionale Anerkennung, dann sachliche Antworten.',
         difficulty: 'Schwer'
@@ -1312,10 +1360,10 @@ function Practice() {
       {
         question: 'Ein Kunde sagt: "Das ist zu teuer für das, was es bietet." Was tust du?',
         options: [
-          { text: 'Den Preis senken', correct: false },
-          { text: '„Dann kaufen Sie es nicht."', correct: false },
+          { text: 'Sofort Rabatt oder Preisnachlass anboten, um den Einwand zu „entschärfen“, ohne Nutzen und Einordnung neu abzusichern', correct: false },
+          { text: '„Alles klar – wenn der Mehrwert für Sie nicht erkennbar ist, macht ein Kauf keinen Sinn. Wir belassen es beim Status quo und dokumentieren den Stand."', correct: false },
           { text: 'Den Mehrwert konkret aufzeigen und ROI berechnen', correct: true },
-          { text: '„Das ist unser Preis."', correct: false }
+          { text: '„Unsere Konditionen sind im Standardrahmen fixiert; wir passen die Liste nicht punktuell an, ohne dass sich Volumen oder Leistungsumfang ändert."', correct: false }
         ],
         feedback: 'Der Kunde sieht den Wert nicht. Zeige konkrete Zahlen und den Return on Investment.',
         difficulty: 'Schwer'
@@ -1326,7 +1374,7 @@ function Practice() {
           { text: 'Alle auf einmal beantworten', correct: false },
           { text: 'Die wichtigsten ignorieren', correct: false },
           { text: 'Priorisieren und einen nach dem anderen behandeln', correct: true },
-          { text: 'Aufgeben', correct: false }
+          { text: 'Das Gespräch freundlich beenden, ohne nächsten Schritt, Termin oder klares Follow-up zu vereinbaren', correct: false }
         ],
         feedback: 'Mehrere Einwände zeigen Engagement. Priorisiere und behandle sie systematisch.',
         difficulty: 'Schwer'
@@ -1334,7 +1382,7 @@ function Practice() {
       {
         question: 'Ein Kunde sagt: "Ich habe schon einen Anbieter, der das macht." Wie reagierst du?',
         options: [
-          { text: '„Dann brauchen Sie uns nicht."', correct: false },
+          { text: '„Verstanden. Wenn Sie das intern vollständig abdecken, ziehe ich mich zurück – dann spare ich uns beiden Zeit."', correct: false },
           { text: '„Ihr Anbieter ist schlecht."', correct: false },
           { text: '„Wie zufrieden sind Sie mit Ihrer aktuellen Lösung? Was könnte besser sein?"', correct: true },
           { text: '„Sie müssen wechseln."', correct: false }
@@ -1345,10 +1393,10 @@ function Practice() {
       {
         question: 'Wie behandelst du einen Einwand, der auf falschen Informationen basiert?',
         options: [
-          { text: 'Den Kunden direkt korrigieren', correct: false },
-          { text: 'Den Einwand ignorieren', correct: false },
+          { text: 'Sofort frontal korrigieren und Fakten vorziehen, ohne die Sorge des Kunden vorab zu spiegeln', correct: false },
+          { text: 'Den Einwand bewusst ignorieren und beim ursprünglichen Pitch bleiben, um Zeit zu sparen', correct: false },
           { text: 'Verständnis zeigen, dann die korrekte Information liefern', correct: true },
-          { text: 'Den Kunden kritisieren', correct: false }
+          { text: 'Den Kunden indirekt kritisieren („Sie verstehen das falsch“), statt gemeinsam Fakten und Kriterien zu klären', correct: false }
         ],
         feedback: 'Falsche Informationen sind Chancen zur Aufklärung. Zeige Verständnis, dann kläre auf.',
         difficulty: 'Mittel'
@@ -1356,7 +1404,7 @@ function Practice() {
       {
         question: 'Ein Kunde sagt: "Ich muss erst noch andere Angebote einholen." Was tust du?',
         options: [
-          { text: '„Dann machen Sie das."', correct: false },
+          { text: '„Perfekt – wenn Ihr Setup intern trägt, dokumentieren wir das so und ich melde mich nicht weiter, damit Sie nicht zusätzlich gebunden werden."', correct: false },
           { text: '„Dann ist das Gespräch beendet."', correct: false },
           { text: '„Verstehe. Was genau möchten Sie vergleichen? Vielleicht kann ich Ihnen dabei helfen."', correct: true },
           { text: '„Wir sind die Besten."', correct: false }
@@ -1392,7 +1440,7 @@ function Practice() {
           { text: '„Dann warten Sie."', correct: false },
           { text: '„Es ist nicht neu."', correct: false },
           { text: '„Verstehe. Was sind Ihre Bedenken? Wir haben bereits viele erfolgreiche Implementierungen."', correct: true },
-          { text: '„Dann kaufen Sie es nicht."', correct: false }
+          { text: '„Alles klar – wenn der Mehrwert für Sie nicht erkennbar ist, macht ein Kauf keinen Sinn. Wir belassen es beim Status quo und dokumentieren den Stand."', correct: false }
         ],
         feedback: 'Neue Technologien lösen Bedenken aus. Zeige Referenzen und Erfolgsgeschichten.',
         difficulty: 'Mittel'
@@ -1400,8 +1448,8 @@ function Practice() {
       {
         question: 'Ein Kunde sagt: "Ich habe gehört, dass Ihr Support schlecht ist." Was tust du?',
         options: [
-          { text: '„Das stimmt nicht."', correct: false },
-          { text: '„Dann kaufen Sie es nicht."', correct: false },
+          { text: '„Das sehe ich anders – unsere Daten und Kundenfeedbacks sprechen eine deutlich stabilere Erwartungshaltung."', correct: false },
+          { text: '„Alles klar – wenn der Mehrwert für Sie nicht erkennbar ist, macht ein Kauf keinen Sinn. Wir belassen es beim Status quo und dokumentieren den Stand."', correct: false },
           { text: '„Woher haben Sie diese Information? Lassen Sie mich zeigen, wie unser Support wirklich funktioniert."', correct: true },
           { text: '„Das ist nicht mein Problem."', correct: false }
         ],
@@ -1414,7 +1462,7 @@ function Practice() {
           { text: 'Das Vorurteil direkt angreifen', correct: false },
           { text: 'Das Vorurteil ignorieren', correct: false },
           { text: 'Verständnis zeigen, dann mit Fakten und Beispielen aufklären', correct: true },
-          { text: 'Den Kunden kritisieren', correct: false }
+          { text: 'Den Kunden indirekt kritisieren („Sie verstehen das falsch“), statt gemeinsam Fakten und Kriterien zu klären', correct: false }
         ],
         feedback: 'Vorurteile sind hartnäckig. Zeige Verständnis, dann liefere Fakten und positive Beispiele.',
         difficulty: 'Schwer'
@@ -1423,7 +1471,7 @@ function Practice() {
         question: 'Ein Kunde sagt: "Ich habe schon zu viele Anbieter getestet." Wie reagierst du?',
         options: [
           { text: '„Dann testen Sie uns nicht."', correct: false },
-          { text: '„Wir sind anders."', correct: false },
+          { text: '„Wir unterscheiden uns klar vom Markt – unsere Kultur und unser Ansatz sind deutlich weniger bürokratisch als bei vielen klassischen Anbietern."', correct: false },
           { text: '„Das verstehe ich. Was hat bei den anderen nicht funktioniert? So kann ich sicherstellen, dass wir das anders machen."', correct: true },
           { text: '„Dann ist das Gespräch beendet."', correct: false }
         ],
@@ -1434,7 +1482,7 @@ function Practice() {
         question: 'Wie behandelst du einen Einwand, der während eines Online-Meetings kommt?',
         options: [
           { text: 'Den Einwand auf später verschieben', correct: false },
-          { text: 'Den Einwand ignorieren', correct: false },
+          { text: 'Den Einwand bewusst ignorieren und beim ursprünglichen Pitch bleiben, um Zeit zu sparen', correct: false },
           { text: 'Den Einwand sofort ansprechen und visuell unterstützen', correct: true },
           { text: 'Das Meeting beenden', correct: false }
         ],
@@ -1447,7 +1495,7 @@ function Practice() {
           { text: '„Dann sind Ihre Mitarbeiter nicht qualifiziert."', correct: false },
           { text: '„Das ist einfach."', correct: false },
           { text: '„Was genau macht Ihnen Sorgen? Wir bieten umfassende Schulungen und Support."', correct: true },
-          { text: '„Dann passt es nicht."', correct: false }
+          { text: '„Dann ist das voraussichtlich keine gute Passung – ich würde das Thema intern ablegen und Ressourcen nicht weiter binden."', correct: false }
         ],
         feedback: 'Komplexitätsbedenken sind real. Zeige konkrete Schulungs- und Support-Angebote.',
         difficulty: 'Mittel'
@@ -1456,7 +1504,7 @@ function Practice() {
         question: 'Was ist die beste Reaktion auf "Ich muss erst noch meine Kollegen fragen"?',
         options: [
           { text: '„Verstehe. Was genau möchten Sie fragen? Kann ich dabei sein oder Materialien bereitstellen?"', correct: true },
-          { text: '„Okay, melden Sie sich dann."', correct: false },
+          { text: '„Alles klar – dann melden Sie sich einfach, sobald es für Sie passt. Ich respektiere Ihre Entscheidungsfreiheit vollständig."', correct: false },
           { text: '„Dann ist das Gespräch beendet."', correct: false },
           { text: '„Sie können selbst entscheiden."', correct: false }
         ],
@@ -1466,10 +1514,10 @@ function Practice() {
       {
         question: 'Ein Kunde sagt: "Ihr Produkt ist zu teuer für unseren Markt." Wie gehst du vor?',
         options: [
-          { text: 'Den Preis senken', correct: false },
-          { text: '„Dann passt es nicht."', correct: false },
+          { text: 'Sofort Rabatt oder Preisnachlass anboten, um den Einwand zu „entschärfen“, ohne Nutzen und Einordnung neu abzusichern', correct: false },
+          { text: '„Dann ist das voraussichtlich keine gute Passung – ich würde das Thema intern ablegen und Ressourcen nicht weiter binden."', correct: false },
           { text: 'Den ROI für diesen spezifischen Markt berechnen und zeigen', correct: true },
-          { text: '„Das ist unser Preis."', correct: false }
+          { text: '„Unsere Konditionen sind im Standardrahmen fixiert; wir passen die Liste nicht punktuell an, ohne dass sich Volumen oder Leistungsumfang ändert."', correct: false }
         ],
         feedback: 'Marktspezifische Bedenken brauchen marktspezifische Antworten. Zeige den ROI für diesen Markt.',
         difficulty: 'Schwer'
@@ -1489,7 +1537,7 @@ function Practice() {
         question: 'Ein Kunde sagt: "Das ist zu innovativ, wir sind konservativ." Was tust du?',
         options: [
           { text: '„Dann sind Sie nicht modern genug."', correct: false },
-          { text: '„Dann passt es nicht."', correct: false },
+          { text: '„Dann ist das voraussichtlich keine gute Passung – ich würde das Thema intern ablegen und Ressourcen nicht weiter binden."', correct: false },
           { text: '„Verstehe. Lassen Sie mich zeigen, wie konservative Unternehmen erfolgreich damit arbeiten."', correct: true },
           { text: '„Sie müssen innovativer werden."', correct: false }
         ],
@@ -1511,9 +1559,9 @@ function Practice() {
         question: 'Ein Kunde sagt: "Ich brauche das nicht, weil wir das intern lösen." Wie reagierst du?',
         options: [
           { text: '„Verstehe. Was kostet Sie die interne Lösung? Zeit, Ressourcen, Opportunitätskosten?"', correct: true },
-          { text: '„Dann brauchen Sie uns nicht."', correct: false },
-          { text: '„Dann machen Sie das."', correct: false },
-          { text: '„Das funktioniert nicht."', correct: false }
+          { text: '„Verstanden. Wenn Sie das intern vollständig abdecken, ziehe ich mich zurück – dann spare ich uns beiden Zeit."', correct: false },
+          { text: '„Perfekt – wenn Ihr Setup intern trägt, dokumentieren wir das so und ich melde mich nicht weiter, damit Sie nicht zusätzlich gebunden werden."', correct: false },
+          { text: '„In meiner Erfahrung reicht interne Umsetzung bei dem Thema oft nicht – langfristig entstehen typischerweise Qualitäts- oder Kapazitätslücken."', correct: false }
         ],
         feedback: 'Interne Lösungen haben versteckte Kosten. Zeige die wahren Kosten der internen Lösung.',
         difficulty: 'Schwer'
@@ -1522,9 +1570,9 @@ function Practice() {
         question: 'Wie behandelst du einen Einwand, der auf einem Missverständnis über dein Produkt basiert?',
         options: [
           { text: 'Den Kunden korrigieren', correct: false },
-          { text: 'Den Einwand ignorieren', correct: false },
+          { text: 'Den Einwand bewusst ignorieren und beim ursprünglichen Pitch bleiben, um Zeit zu sparen', correct: false },
           { text: 'Verständnis zeigen, dann die korrekte Funktionsweise erklären', correct: true },
-          { text: 'Den Kunden kritisieren', correct: false }
+          { text: 'Den Kunden indirekt kritisieren („Sie verstehen das falsch“), statt gemeinsam Fakten und Kriterien zu klären', correct: false }
         ],
         feedback: 'Missverständnisse sind Chancen zur Aufklärung. Zeige Verständnis, dann kläre auf.',
         difficulty: 'Mittel'
@@ -1532,10 +1580,10 @@ function Practice() {
       {
         question: 'Ein Kunde sagt: "Das ist zu teuer für den ROI, den ich sehe." Was tust du?',
         options: [
-          { text: 'Den Preis senken', correct: false },
-          { text: '„Dann kaufen Sie es nicht."', correct: false },
+          { text: 'Sofort Rabatt oder Preisnachlass anboten, um den Einwand zu „entschärfen“, ohne Nutzen und Einordnung neu abzusichern', correct: false },
+          { text: '„Alles klar – wenn der Mehrwert für Sie nicht erkennbar ist, macht ein Kauf keinen Sinn. Wir belassen es beim Status quo und dokumentieren den Stand."', correct: false },
           { text: 'Den ROI detailliert berechnen und zeigen, was der Kunde übersieht', correct: true },
-          { text: '„Das ist unser Preis."', correct: false }
+          { text: '„Unsere Konditionen sind im Standardrahmen fixiert; wir passen die Liste nicht punktuell an, ohne dass sich Volumen oder Leistungsumfang ändert."', correct: false }
         ],
         feedback: 'Der Kunde sieht den ROI nicht vollständig. Zeige alle versteckten Vorteile und Einsparungen.',
         difficulty: 'Schwer'
@@ -1543,8 +1591,8 @@ function Practice() {
       {
         question: 'Was ist die beste Reaktion auf "Ich habe schon zu viele Anbieter, die mir das versprochen haben"?',
         options: [
-          { text: '„Wir sind anders."', correct: false },
-          { text: '„Dann kaufen Sie es nicht."', correct: false },
+          { text: '„Wir unterscheiden uns klar vom Markt – unsere Kultur und unser Ansatz sind deutlich weniger bürokratisch als bei vielen klassischen Anbietern."', correct: false },
+          { text: '„Alles klar – wenn der Mehrwert für Sie nicht erkennbar ist, macht ein Kauf keinen Sinn. Wir belassen es beim Status quo und dokumentieren den Stand."', correct: false },
           { text: '„Das verstehe ich. Lassen Sie mich zeigen, wie wir unsere Versprechen halten – mit konkreten Beispielen."', correct: true },
           { text: '„Das war nicht unsere Schuld."', correct: false }
         ],
@@ -1554,10 +1602,10 @@ function Practice() {
       {
         question: 'Ein Kunde sagt: "Das ist zu teuer für unsere Größe." Wie gehst du vor?',
         options: [
-          { text: 'Den Preis senken', correct: false },
-          { text: '„Dann passt es nicht."', correct: false },
+          { text: 'Sofort Rabatt oder Preisnachlass anboten, um den Einwand zu „entschärfen“, ohne Nutzen und Einordnung neu abzusichern', correct: false },
+          { text: '„Dann ist das voraussichtlich keine gute Passung – ich würde das Thema intern ablegen und Ressourcen nicht weiter binden."', correct: false },
           { text: 'Den ROI für Unternehmen dieser Größe berechnen und skalierbare Optionen zeigen', correct: true },
-          { text: '„Das ist unser Preis."', correct: false }
+          { text: '„Unsere Konditionen sind im Standardrahmen fixiert; wir passen die Liste nicht punktuell an, ohne dass sich Volumen oder Leistungsumfang ändert."', correct: false }
         ],
         feedback: 'Größenbedenken brauchen größenangepasste Antworten. Zeige skalierbare Lösungen und ROI.',
         difficulty: 'Mittel'
@@ -1566,7 +1614,7 @@ function Practice() {
         question: 'Wie reagierst du auf "Ich brauche das nicht, weil wir das anders machen"?',
         options: [
           { text: '„Verstehe. Wie machen Sie das aktuell? Vielleicht können wir Ihre Methode optimieren."', correct: true },
-          { text: '„Dann brauchen Sie uns nicht."', correct: false },
+          { text: '„Verstanden. Wenn Sie das intern vollständig abdecken, ziehe ich mich zurück – dann spare ich uns beiden Zeit."', correct: false },
           { text: '„Ihre Methode ist falsch."', correct: false },
           { text: '„Dann machen Sie es falsch."', correct: false }
         ],
@@ -1576,10 +1624,10 @@ function Practice() {
       {
         question: 'Ein Kunde sagt: "Das ist zu teuer für unseren Use Case." Was tust du?',
         options: [
-          { text: 'Den Preis senken', correct: false },
-          { text: '„Dann passt es nicht."', correct: false },
+          { text: 'Sofort Rabatt oder Preisnachlass anboten, um den Einwand zu „entschärfen“, ohne Nutzen und Einordnung neu abzusichern', correct: false },
+          { text: '„Dann ist das voraussichtlich keine gute Passung – ich würde das Thema intern ablegen und Ressourcen nicht weiter binden."', correct: false },
           { text: 'Den ROI für diesen spezifischen Use Case berechnen und zeigen', correct: true },
-          { text: '„Das ist unser Preis."', correct: false }
+          { text: '„Unsere Konditionen sind im Standardrahmen fixiert; wir passen die Liste nicht punktuell an, ohne dass sich Volumen oder Leistungsumfang ändert."', correct: false }
         ],
         feedback: 'Use-Case-spezifische Bedenken brauchen Use-Case-spezifische ROI-Berechnungen.',
         difficulty: 'Schwer'
@@ -1587,10 +1635,10 @@ function Practice() {
       {
         question: 'Was ist die beste Strategie bei einem Einwand, der auf einem schlechten ersten Eindruck basiert?',
         options: [
-          { text: 'Den ersten Eindruck ignorieren', correct: false },
-          { text: 'Den Kunden kritisieren', correct: false },
+          { text: 'Den ersten Eindruck als „Geschmackssache“ abtun und ohne neue Gesprächsführung normal weiterarbeiten', correct: false },
+          { text: 'Den Kunden indirekt kritisieren („Sie verstehen das falsch“), statt gemeinsam Fakten und Kriterien zu klären', correct: false },
           { text: 'Den ersten Eindruck anerkennen und dann einen neuen, positiven Eindruck schaffen', correct: true },
-          { text: 'Aufgeben', correct: false }
+          { text: 'Das Gespräch freundlich beenden, ohne nächsten Schritt, Termin oder klares Follow-up zu vereinbaren', correct: false }
         ],
         feedback: 'Erste Eindrücke sind wichtig, aber korrigierbar. Schaffe einen neuen, positiven Eindruck.',
         difficulty: 'Schwer'
@@ -1598,10 +1646,10 @@ function Practice() {
       {
         question: 'Ein Kunde sagt: "Ich habe schon zu viele Tools, die ich nicht nutze." Wie reagierst du?',
         options: [
-          { text: '„Dann brauchen Sie uns nicht."', correct: false },
-          { text: '„Wir sind anders."', correct: false },
+          { text: '„Verstanden. Wenn Sie das intern vollständig abdecken, ziehe ich mich zurück – dann spare ich uns beiden Zeit."', correct: false },
+          { text: '„Wir unterscheiden uns klar vom Markt – unsere Kultur und unser Ansatz sind deutlich weniger bürokratisch als bei vielen klassischen Anbietern."', correct: false },
           { text: '„Verstehe. Was hat bei den anderen Tools nicht funktioniert? So kann ich sicherstellen, dass Sie unser Tool wirklich nutzen."', correct: true },
-          { text: '„Dann kaufen Sie es nicht."', correct: false }
+          { text: '„Alles klar – wenn der Mehrwert für Sie nicht erkennbar ist, macht ein Kauf keinen Sinn. Wir belassen es beim Status quo und dokumentieren den Stand."', correct: false }
         ],
         feedback: 'Ungenutzte Tools sind ein echtes Problem. Zeige, wie du Adoption sicherstellst.',
         difficulty: 'Schwer'
@@ -1612,7 +1660,7 @@ function Practice() {
           { text: 'Sagen, dass dein Produkt anders ist', correct: false },
           { text: 'Das schlechte Erlebnis ignorieren', correct: false },
           { text: 'Empathie zeigen, dann zeigen, wie du die Probleme vermeidest', correct: true },
-          { text: 'Den Kunden kritisieren', correct: false }
+          { text: 'Den Kunden indirekt kritisieren („Sie verstehen das falsch“), statt gemeinsam Fakten und Kriterien zu klären', correct: false }
         ],
         feedback: 'Negative Erfahrungen sind real. Zeige Empathie und dann, wie du es besser machst.',
         difficulty: 'Schwer'
@@ -1620,10 +1668,10 @@ function Practice() {
       {
         question: 'Ein Kunde sagt: "Das ist zu teuer für das, was wir damit machen können." Was tust du?',
         options: [
-          { text: 'Den Preis senken', correct: false },
-          { text: '„Dann kaufen Sie es nicht."', correct: false },
+          { text: 'Sofort Rabatt oder Preisnachlass anboten, um den Einwand zu „entschärfen“, ohne Nutzen und Einordnung neu abzusichern', correct: false },
+          { text: '„Alles klar – wenn der Mehrwert für Sie nicht erkennbar ist, macht ein Kauf keinen Sinn. Wir belassen es beim Status quo und dokumentieren den Stand."', correct: false },
           { text: 'Zeigen, was der Kunde wirklich damit machen kann – oft mehr als gedacht', correct: true },
-          { text: '„Das ist unser Preis."', correct: false }
+          { text: '„Unsere Konditionen sind im Standardrahmen fixiert; wir passen die Liste nicht punktuell an, ohne dass sich Volumen oder Leistungsumfang ändert."', correct: false }
         ],
         feedback: 'Der Kunde sieht nicht alle Möglichkeiten. Zeige den vollen Funktionsumfang und Nutzen.',
         difficulty: 'Schwer'
@@ -1853,9 +1901,9 @@ function Practice() {
         question: 'Was ist eine "Leading Question" und wann ist sie problematisch?',
         options: [
           { text: 'Eine Frage, die den Kunden in eine bestimmte Richtung lenkt – kann manipulativ wirken', correct: true },
-          { text: 'Eine Frage, die offen ist – immer gut', correct: false },
+          { text: 'Eine Frage, die den Kunden in eine Richtung lenkt, ohne dass er die Konsequenzen selbst benennen muss', correct: false },
           { text: 'Eine Frage, die geschlossen ist – immer schlecht', correct: false },
-          { text: 'Eine Frage, die das Budget erfragt', correct: false }
+          { text: 'Eine Frage, die nur oberflächlich Vertrauen zappt, ohne Kriterien und nächste Entscheidungsschritte zu schärfen', correct: false }
         ],
         feedback: 'Leading Questions lenken den Kunden in eine Richtung. Sie können manipulativ wirken und Vertrauen schädigen.',
         difficulty: 'Mittel'
@@ -1864,7 +1912,7 @@ function Practice() {
         question: 'Was ist eine "Clarifying Question"?',
         options: [
           { text: 'Eine Frage, die Unklarheiten beseitigt', correct: true },
-          { text: 'Eine Frage, die das Budget erfragt', correct: false },
+          { text: 'Eine Frage, die nur smalltalkt und keine strukturierte Information für die nächste Entscheidung liefert', correct: false },
           { text: 'Eine Frage, die den Abschluss einleitet', correct: false },
           { text: 'Eine Frage, die offen ist', correct: false }
         ],
@@ -1877,7 +1925,7 @@ function Practice() {
           { text: 'Du stellst nur geschlossene Fragen', correct: false },
           { text: 'Du beginnst breit und verengst dann schrittweise zu spezifischen Details', correct: true },
           { text: 'Du stellst nur offene Fragen', correct: false },
-          { text: 'Du fragst nur nach dem Preis', correct: false }
+          { text: 'Du priorisierst Konditionen und Modalitäten, bevor Bedarf, Zeitrahmen und Entscheiderstruktur belastbar geklärt sind', correct: false }
         ],
         feedback: 'Funnel-Fragen folgen einer Trichter-Struktur: breit beginnen, dann schrittweise verengen.',
         difficulty: 'Mittel'
@@ -1907,10 +1955,10 @@ function Practice() {
       {
         question: 'Wie nutzt du Fragen, um den Bedarf zu qualifizieren?',
         options: [
-          { text: 'Du fragst nur nach dem Preis', correct: false },
+          { text: 'Du priorisierst Konditionen und Zahlungsmodalitäten, bevor Bedarf, Zeitrahmen und Entscheiderstruktur klar sind', correct: false },
           { text: 'Du nutzt BANT oder ähnliche Modelle, um Budget, Authority, Need und Timeline zu prüfen', correct: true },
-          { text: 'Du fragst nur nach dem Namen', correct: false },
-          { text: 'Du stellst keine Fragen', correct: false }
+          { text: 'Du bleibst bei Formalien (z. B. Ansprechpartner) und gehst nicht in Bedarf, Entscheidungsprozess und Dringlichkeit', correct: false },
+          { text: 'Du verzichtest fast vollständig auf gezielte Fragen und steuerst das Gespräch nur über Aussagen', correct: false }
         ],
         feedback: 'Qualifizierung braucht strukturierte Fragen. BANT ist ein bewährtes Modell dafür.',
         difficulty: 'Mittel'
@@ -1919,9 +1967,9 @@ function Practice() {
         question: 'Was ist eine "Assumptive Question"?',
         options: [
           { text: 'Eine Frage, die eine Annahme enthält und den Kunden in eine Richtung lenkt', correct: true },
-          { text: 'Eine Frage, die offen ist', correct: false },
-          { text: 'Eine Frage, die geschlossen ist', correct: false },
-          { text: 'Eine Frage, die das Budget erfragt', correct: false }
+          { text: 'Eine Frage, die vor allem operative Eckdaten (Team, Volumen, Ablauf) erfasst – nützlich, aber nicht dasselbe wie der gesuchte Fragetyp', correct: false },
+          { text: 'Eine Frage, die den Kunden ausführlich zum Erzählen einlädt und absichtlich keine klare Ja/Nein-Entscheidung erzwingt', correct: false },
+          { text: 'Eine Frage, die nur oberflächlich Vertrauen zappt, ohne Kriterien und nächste Entscheidungsschritte zu schärfen', correct: false }
         ],
         feedback: 'Assumptive Questions enthalten Annahmen. Sie können nützlich sein, aber auch manipulativ wirken.',
         difficulty: 'Mittel'
@@ -1929,9 +1977,9 @@ function Practice() {
       {
         question: 'Wie nutzt du Fragen, um Einwände zu vermeiden?',
         options: [
-          { text: 'Du stellst keine Fragen', correct: false },
+          { text: 'Du verzichtest fast vollständig auf gezielte Fragen und steuerst das Gespräch nur über Aussagen', correct: false },
           { text: 'Du stellst proaktive Fragen, die Bedenken früh aufdecken', correct: true },
-          { text: 'Du fragst nur nach dem Preis', correct: false },
+          { text: 'Du priorisierst Konditionen und Zahlungsmodalitäten, bevor Bedarf, Zeitrahmen und Entscheiderstruktur klar sind', correct: false },
           { text: 'Du stellst nur geschlossene Fragen', correct: false }
         ],
         feedback: 'Proaktive Fragen decken Bedenken früh auf, bevor sie zu Einwänden werden.',
@@ -1941,9 +1989,9 @@ function Practice() {
         question: 'Was ist eine "Trial Close Question"?',
         options: [
           { text: 'Eine Frage, die den Abschluss testet, ohne ihn direkt zu fordern', correct: true },
-          { text: 'Eine Frage, die offen ist', correct: false },
-          { text: 'Eine Frage, die geschlossen ist', correct: false },
-          { text: 'Eine Frage, die das Budget erfragt', correct: false }
+          { text: 'Eine Frage, die vor allem operative Eckdaten (Team, Volumen, Ablauf) erfasst – nützlich, aber nicht dasselbe wie der gesuchte Fragetyp', correct: false },
+          { text: 'Eine Frage, die den Kunden ausführlich zum Erzählen einlädt und absichtlich keine klare Ja/Nein-Entscheidung erzwingt', correct: false },
+          { text: 'Eine Frage, die nur oberflächlich Vertrauen zappt, ohne Kriterien und nächste Entscheidungsschritte zu schärfen', correct: false }
         ],
         feedback: 'Trial Close Questions testen die Kaufbereitschaft, ohne direkt zu schließen.',
         difficulty: 'Mittel'
@@ -1951,10 +1999,10 @@ function Practice() {
       {
         question: 'Wie nutzt du Fragen, um den Entscheidungsprozess zu verstehen?',
         options: [
-          { text: 'Du fragst nur nach dem Preis', correct: false },
+          { text: 'Du priorisierst Konditionen und Zahlungsmodalitäten, bevor Bedarf, Zeitrahmen und Entscheiderstruktur klar sind', correct: false },
           { text: 'Du stellst Fragen wie "Wer ist am Entscheidungsprozess beteiligt?" und "Wie läuft der Prozess ab?"', correct: true },
-          { text: 'Du stellst keine Fragen', correct: false },
-          { text: 'Du fragst nur nach dem Namen', correct: false }
+          { text: 'Du verzichtest fast vollständig auf gezielte Fragen und steuerst das Gespräch nur über Aussagen', correct: false },
+          { text: 'Du bleibst bei Formalien und gehst nicht in Bedarf, Entscheidungsprozess und Dringlichkeit', correct: false }
         ],
         feedback: 'Entscheidungsprozess-Fragen helfen, die Struktur und Beteiligten zu verstehen.',
         difficulty: 'Mittel'
@@ -1963,9 +2011,9 @@ function Practice() {
         question: 'Was ist eine "Pain Question"?',
         options: [
           { text: 'Eine Frage, die Schmerzpunkte identifiziert', correct: true },
-          { text: 'Eine Frage, die offen ist', correct: false },
-          { text: 'Eine Frage, die geschlossen ist', correct: false },
-          { text: 'Eine Frage, die das Budget erfragt', correct: false }
+          { text: 'Eine Frage, die vor allem operative Eckdaten (Team, Volumen, Ablauf) erfasst – nützlich, aber nicht dasselbe wie der gesuchte Fragetyp', correct: false },
+          { text: 'Eine Frage, die den Kunden ausführlich zum Erzählen einlädt und absichtlich keine klare Ja/Nein-Entscheidung erzwingt', correct: false },
+          { text: 'Eine Frage, die nur oberflächlich Vertrauen zappt, ohne Kriterien und nächste Entscheidungsschritte zu schärfen', correct: false }
         ],
         feedback: 'Pain Questions identifizieren Schmerzpunkte und Herausforderungen des Kunden.',
         difficulty: 'Einfach'
@@ -1973,10 +2021,10 @@ function Practice() {
       {
         question: 'Wie nutzt du Fragen, um den Wert zu kommunizieren?',
         options: [
-          { text: 'Du fragst nur nach dem Preis', correct: false },
+          { text: 'Du priorisierst Konditionen und Zahlungsmodalitäten, bevor Bedarf, Zeitrahmen und Entscheiderstruktur klar sind', correct: false },
           { text: 'Du stellst Fragen, die den Kunden selbst den Wert beschreiben lassen', correct: true },
-          { text: 'Du stellst keine Fragen', correct: false },
-          { text: 'Du fragst nur nach dem Namen', correct: false }
+          { text: 'Du verzichtest fast vollständig auf gezielte Fragen und steuerst das Gespräch nur über Aussagen', correct: false },
+          { text: 'Du bleibst bei Formalien und gehst nicht in Bedarf, Entscheidungsprozess und Dringlichkeit', correct: false }
         ],
         feedback: 'Wert-Fragen lassen den Kunden selbst den Wert beschreiben. Das ist überzeugender als wenn du es sagst.',
         difficulty: 'Schwer'
@@ -1985,9 +2033,9 @@ function Practice() {
         question: 'Was ist eine "Objection Prevention Question"?',
         options: [
           { text: 'Eine Frage, die Einwände verhindert, bevor sie entstehen', correct: true },
-          { text: 'Eine Frage, die offen ist', correct: false },
-          { text: 'Eine Frage, die geschlossen ist', correct: false },
-          { text: 'Eine Frage, die das Budget erfragt', correct: false }
+          { text: 'Eine Frage, die vor allem operative Eckdaten (Team, Volumen, Ablauf) erfasst – nützlich, aber nicht dasselbe wie der gesuchte Fragetyp', correct: false },
+          { text: 'Eine Frage, die den Kunden ausführlich zum Erzählen einlädt und absichtlich keine klare Ja/Nein-Entscheidung erzwingt', correct: false },
+          { text: 'Eine Frage, die nur oberflächlich Vertrauen zappt, ohne Kriterien und nächste Entscheidungsschritte zu schärfen', correct: false }
         ],
         feedback: 'Objection Prevention Questions decken Bedenken früh auf, bevor sie zu Einwänden werden.',
         difficulty: 'Mittel'
@@ -1997,8 +2045,8 @@ function Practice() {
         options: [
           { text: 'Du fragst nur "Wann?"', correct: false },
           { text: 'Du stellst Fragen wie "Was passiert, wenn Sie warten?" und "Was ist der Zeitrahmen für die Entscheidung?"', correct: true },
-          { text: 'Du stellst keine Fragen', correct: false },
-          { text: 'Du fragst nur nach dem Preis', correct: false }
+          { text: 'Du verzichtest fast vollständig auf gezielte Fragen und steuerst das Gespräch nur über Aussagen', correct: false },
+          { text: 'Du priorisierst Konditionen und Modalitäten, bevor Bedarf, Zeitrahmen und Entscheiderstruktur belastbar geklärt sind', correct: false }
         ],
         feedback: 'Zeitrahmen-Fragen helfen, Dringlichkeit und Timeline zu verstehen.',
         difficulty: 'Mittel'
@@ -2007,9 +2055,9 @@ function Practice() {
         question: 'Was ist eine "Benefit Question"?',
         options: [
           { text: 'Eine Frage, die den Nutzen einer Lösung erfragt', correct: true },
-          { text: 'Eine Frage, die offen ist', correct: false },
-          { text: 'Eine Frage, die geschlossen ist', correct: false },
-          { text: 'Eine Frage, die das Budget erfragt', correct: false }
+          { text: 'Eine Frage, die vor allem operative Eckdaten (Team, Volumen, Ablauf) erfasst – nützlich, aber nicht dasselbe wie der gesuchte Fragetyp', correct: false },
+          { text: 'Eine Frage, die den Kunden ausführlich zum Erzählen einlädt und absichtlich keine klare Ja/Nein-Entscheidung erzwingt', correct: false },
+          { text: 'Eine Frage, die nur oberflächlich Vertrauen zappt, ohne Kriterien und nächste Entscheidungsschritte zu schärfen', correct: false }
         ],
         feedback: 'Benefit Questions helfen, den Nutzen einer Lösung zu verstehen und zu kommunizieren.',
         difficulty: 'Mittel'
@@ -2017,10 +2065,10 @@ function Practice() {
       {
         question: 'Wie nutzt du Fragen, um die Konkurrenz zu verstehen?',
         options: [
-          { text: 'Du kritisierst die Konkurrenz', correct: false },
+          { text: 'Du arbeitest mit indirekten Vergleichen („die anderen können das oft nicht“), ohne deren Kriterien sauber zu klären', correct: false },
           { text: 'Du stellst Fragen wie "Welche anderen Lösungen prüfen Sie?" und "Was ist Ihnen bei einer Lösung wichtig?"', correct: true },
-          { text: 'Du stellst keine Fragen', correct: false },
-          { text: 'Du fragst nur nach dem Preis', correct: false }
+          { text: 'Du verzichtest fast vollständig auf gezielte Fragen und steuerst das Gespräch nur über Aussagen', correct: false },
+          { text: 'Du priorisierst Konditionen und Modalitäten, bevor Bedarf, Zeitrahmen und Entscheiderstruktur belastbar geklärt sind', correct: false }
         ],
         feedback: 'Konkurrenz-Fragen helfen, die Kriterien zu verstehen, ohne die Konkurrenz zu kritisieren.',
         difficulty: 'Mittel'
@@ -2029,9 +2077,9 @@ function Practice() {
         question: 'Was ist eine "Commitment Question"?',
         options: [
           { text: 'Eine Frage, die eine Zusage oder Verpflichtung testet', correct: true },
-          { text: 'Eine Frage, die offen ist', correct: false },
-          { text: 'Eine Frage, die geschlossen ist', correct: false },
-          { text: 'Eine Frage, die das Budget erfragt', correct: false }
+          { text: 'Eine Frage, die vor allem operative Eckdaten (Team, Volumen, Ablauf) erfasst – nützlich, aber nicht dasselbe wie der gesuchte Fragetyp', correct: false },
+          { text: 'Eine Frage, die den Kunden ausführlich zum Erzählen einlädt und absichtlich keine klare Ja/Nein-Entscheidung erzwingt', correct: false },
+          { text: 'Eine Frage, die nur oberflächlich Vertrauen zappt, ohne Kriterien und nächste Entscheidungsschritte zu schärfen', correct: false }
         ],
         feedback: 'Commitment Questions testen die Bereitschaft, eine Zusage zu machen oder sich zu verpflichten.',
         difficulty: 'Mittel'
@@ -2041,8 +2089,8 @@ function Practice() {
         options: [
           { text: 'Du fragst nur "Wer entscheidet?"', correct: false },
           { text: 'Du stellst Fragen wie "Wer ist am Entscheidungsprozess beteiligt?" und "Wer hat die finale Entscheidungsbefugnis?"', correct: true },
-          { text: 'Du stellst keine Fragen', correct: false },
-          { text: 'Du fragst nur nach dem Preis', correct: false }
+          { text: 'Du verzichtest fast vollständig auf gezielte Fragen und steuerst das Gespräch nur über Aussagen', correct: false },
+          { text: 'Du priorisierst Konditionen und Modalitäten, bevor Bedarf, Zeitrahmen und Entscheiderstruktur belastbar geklärt sind', correct: false }
         ],
         feedback: 'Entscheider-Fragen helfen, die Entscheidungsstruktur zu verstehen.',
         difficulty: 'Mittel'
@@ -2051,9 +2099,9 @@ function Practice() {
         question: 'Was ist eine "Discovery Question"?',
         options: [
           { text: 'Eine Frage, die Informationen über den Kunden und seine Situation sammelt', correct: true },
-          { text: 'Eine Frage, die offen ist', correct: false },
-          { text: 'Eine Frage, die geschlossen ist', correct: false },
-          { text: 'Eine Frage, die das Budget erfragt', correct: false }
+          { text: 'Eine Frage, die vor allem operative Eckdaten (Team, Volumen, Ablauf) erfasst – nützlich, aber nicht dasselbe wie der gesuchte Fragetyp', correct: false },
+          { text: 'Eine Frage, die den Kunden ausführlich zum Erzählen einlädt und absichtlich keine klare Ja/Nein-Entscheidung erzwingt', correct: false },
+          { text: 'Eine Frage, die nur oberflächlich Vertrauen zappt, ohne Kriterien und nächste Entscheidungsschritte zu schärfen', correct: false }
         ],
         feedback: 'Discovery Questions sammeln Informationen über den Kunden, seine Situation und Bedürfnisse.',
         difficulty: 'Einfach'
@@ -2063,8 +2111,8 @@ function Practice() {
         options: [
           { text: 'Du sagst einfach den ROI', correct: false },
           { text: 'Du stellst Fragen, die den Kunden selbst den ROI berechnen lassen', correct: true },
-          { text: 'Du stellst keine Fragen', correct: false },
-          { text: 'Du fragst nur nach dem Preis', correct: false }
+          { text: 'Du verzichtest fast vollständig auf gezielte Fragen und steuerst das Gespräch nur über Aussagen', correct: false },
+          { text: 'Du priorisierst Konditionen und Modalitäten, bevor Bedarf, Zeitrahmen und Entscheiderstruktur belastbar geklärt sind', correct: false }
         ],
         feedback: 'ROI-Fragen lassen den Kunden selbst den ROI berechnen. Das ist überzeugender als wenn du es sagst.',
         difficulty: 'Schwer'
@@ -2073,9 +2121,9 @@ function Practice() {
         question: 'Was ist eine "Qualifying Question"?',
         options: [
           { text: 'Eine Frage, die prüft, ob der Lead kaufbereit ist', correct: true },
-          { text: 'Eine Frage, die offen ist', correct: false },
-          { text: 'Eine Frage, die geschlossen ist', correct: false },
-          { text: 'Eine Frage, die das Budget erfragt', correct: false }
+          { text: 'Eine Frage, die vor allem operative Eckdaten (Team, Volumen, Ablauf) erfasst – nützlich, aber nicht dasselbe wie der gesuchte Fragetyp', correct: false },
+          { text: 'Eine Frage, die den Kunden ausführlich zum Erzählen einlädt und absichtlich keine klare Ja/Nein-Entscheidung erzwingt', correct: false },
+          { text: 'Eine Frage, die nur oberflächlich Vertrauen zappt, ohne Kriterien und nächste Entscheidungsschritte zu schärfen', correct: false }
         ],
         feedback: 'Qualifying Questions prüfen, ob ein Lead wirklich kaufbereit ist (z. B. BANT).',
         difficulty: 'Einfach'
@@ -2085,8 +2133,8 @@ function Practice() {
         options: [
           { text: 'Du sagst einfach, dass der Kunde es braucht', correct: false },
           { text: 'Du stellst Implication Questions, die die Folgen des Problems zeigen', correct: true },
-          { text: 'Du stellst keine Fragen', correct: false },
-          { text: 'Du fragst nur nach dem Preis', correct: false }
+          { text: 'Du verzichtest fast vollständig auf gezielte Fragen und steuerst das Gespräch nur über Aussagen', correct: false },
+          { text: 'Du priorisierst Konditionen und Modalitäten, bevor Bedarf, Zeitrahmen und Entscheiderstruktur belastbar geklärt sind', correct: false }
         ],
         feedback: 'Implication Questions verstärken den Bedarf, indem sie die Folgen des Problems zeigen.',
         difficulty: 'Schwer'
@@ -2095,9 +2143,9 @@ function Practice() {
         question: 'Was ist eine "Objection Handling Question"?',
         options: [
           { text: 'Eine Frage, die einen Einwand behandelt, indem sie nachfragt', correct: true },
-          { text: 'Eine Frage, die offen ist', correct: false },
-          { text: 'Eine Frage, die geschlossen ist', correct: false },
-          { text: 'Eine Frage, die das Budget erfragt', correct: false }
+          { text: 'Eine Frage, die vor allem operative Eckdaten (Team, Volumen, Ablauf) erfasst – nützlich, aber nicht dasselbe wie der gesuchte Fragetyp', correct: false },
+          { text: 'Eine Frage, die den Kunden ausführlich zum Erzählen einlädt und absichtlich keine klare Ja/Nein-Entscheidung erzwingt', correct: false },
+          { text: 'Eine Frage, die nur oberflächlich Vertrauen zappt, ohne Kriterien und nächste Entscheidungsschritte zu schärfen', correct: false }
         ],
         feedback: 'Objection Handling Questions behandeln Einwände, indem sie nachfragen und klären.',
         difficulty: 'Mittel'
@@ -2107,8 +2155,8 @@ function Practice() {
         options: [
           { text: 'Du sagst einfach "Kaufen Sie es"', correct: false },
           { text: 'Du stellst geschlossene Fragen, die eine Entscheidung testen', correct: true },
-          { text: 'Du stellst keine Fragen', correct: false },
-          { text: 'Du fragst nur nach dem Preis', correct: false }
+          { text: 'Du verzichtest fast vollständig auf gezielte Fragen und steuerst das Gespräch nur über Aussagen', correct: false },
+          { text: 'Du priorisierst Konditionen und Modalitäten, bevor Bedarf, Zeitrahmen und Entscheiderstruktur belastbar geklärt sind', correct: false }
         ],
         feedback: 'Abschluss-Fragen testen die Kaufbereitschaft und leiten den Abschluss ein.',
         difficulty: 'Mittel'
@@ -2117,9 +2165,9 @@ function Practice() {
         question: 'Was ist eine "Follow-up Question"?',
         options: [
           { text: 'Eine Frage, die auf eine vorherige Antwort aufbaut', correct: true },
-          { text: 'Eine Frage, die offen ist', correct: false },
-          { text: 'Eine Frage, die geschlossen ist', correct: false },
-          { text: 'Eine Frage, die das Budget erfragt', correct: false }
+          { text: 'Eine Frage, die vor allem operative Eckdaten (Team, Volumen, Ablauf) erfasst – nützlich, aber nicht dasselbe wie der gesuchte Fragetyp', correct: false },
+          { text: 'Eine Frage, die den Kunden ausführlich zum Erzählen einlädt und absichtlich keine klare Ja/Nein-Entscheidung erzwingt', correct: false },
+          { text: 'Eine Frage, die nur oberflächlich Vertrauen zappt, ohne Kriterien und nächste Entscheidungsschritte zu schärfen', correct: false }
         ],
         feedback: 'Follow-up Questions bauen auf vorherige Antworten auf und vertiefen das Verständnis.',
         difficulty: 'Einfach'
@@ -2127,10 +2175,10 @@ function Practice() {
       {
         question: 'Wie nutzt du Fragen, um Vertrauen aufzubauen?',
         options: [
-          { text: 'Du fragst nur nach dem Preis', correct: false },
+          { text: 'Du priorisierst Konditionen und Zahlungsmodalitäten, bevor Bedarf, Zeitrahmen und Entscheiderstruktur klar sind', correct: false },
           { text: 'Du stellst Fragen, die echtes Interesse zeigen und den Kunden zum Reden bringen', correct: true },
-          { text: 'Du stellst keine Fragen', correct: false },
-          { text: 'Du fragst nur nach dem Namen', correct: false }
+          { text: 'Du verzichtest fast vollständig auf gezielte Fragen und steuerst das Gespräch nur über Aussagen', correct: false },
+          { text: 'Du bleibst bei Formalien und gehst nicht in Bedarf, Entscheidungsprozess und Dringlichkeit', correct: false }
         ],
         feedback: 'Vertrauens-Fragen zeigen echtes Interesse und lassen den Kunden reden. Das baut Vertrauen auf.',
         difficulty: 'Mittel'
@@ -2139,9 +2187,9 @@ function Practice() {
         question: 'Was ist eine "Value Question"?',
         options: [
           { text: 'Eine Frage, die den Wert einer Lösung erfragt oder kommuniziert', correct: true },
-          { text: 'Eine Frage, die offen ist', correct: false },
-          { text: 'Eine Frage, die geschlossen ist', correct: false },
-          { text: 'Eine Frage, die das Budget erfragt', correct: false }
+          { text: 'Eine Frage, die vor allem operative Eckdaten (Team, Volumen, Ablauf) erfasst – nützlich, aber nicht dasselbe wie der gesuchte Fragetyp', correct: false },
+          { text: 'Eine Frage, die den Kunden ausführlich zum Erzählen einlädt und absichtlich keine klare Ja/Nein-Entscheidung erzwingt', correct: false },
+          { text: 'Eine Frage, die nur oberflächlich Vertrauen zappt, ohne Kriterien und nächste Entscheidungsschritte zu schärfen', correct: false }
         ],
         feedback: 'Value Questions helfen, den Wert einer Lösung zu verstehen und zu kommunizieren.',
         difficulty: 'Mittel'
@@ -2151,14 +2199,30 @@ function Practice() {
         options: [
           { text: 'Du drängst den Kunden', correct: false },
           { text: 'Du stellst Fragen, die die Dringlichkeit zeigen und den Prozess strukturieren', correct: true },
-          { text: 'Du stellst keine Fragen', correct: false },
-          { text: 'Du fragst nur nach dem Preis', correct: false }
+          { text: 'Du verzichtest fast vollständig auf gezielte Fragen und steuerst das Gespräch nur über Aussagen', correct: false },
+          { text: 'Du priorisierst Konditionen und Modalitäten, bevor Bedarf, Zeitrahmen und Entscheiderstruktur belastbar geklärt sind', correct: false }
         ],
         feedback: 'Prozess-Fragen strukturieren den Entscheidungsprozess und zeigen Dringlichkeit, ohne zu drängen.',
         difficulty: 'Schwer'
       }
     ]
   }
+
+  const quizShuffledOptions = React.useMemo(() => {
+    if (activeMode !== 'adaptive-quiz' || !activeTopic) return []
+    const pool = quizQuestions.length > 0 ? quizQuestions : (adaptiveQuizQuestions[activeTopic] || [])
+    const q = pool[quizQuestionIndex]
+    const options = q?.options
+    if (!Array.isArray(options) || options.length === 0) return []
+    const copy = [...options]
+    for (let i = copy.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1))
+      const tmp = copy[i]
+      copy[i] = copy[j]
+      copy[j] = tmp
+    }
+    return copy
+  }, [activeMode, activeTopic, quizQuestionIndex, quizQuestions])
   
   // Karteikarten
   const flashcards = [
@@ -2639,7 +2703,7 @@ function Practice() {
       options: [
         { text: '„Dann können wir nichts machen."', correct: false, feedback: 'I-Typen reagieren auf Emotionen und Storys, nicht auf Preis allein.' },
         { text: '„Verstehe. Lassen Sie mich Ihnen zeigen, wie andere Kunden mit ähnlicher Situation den ROI gesehen haben – hier ist eine Erfolgsgeschichte..."', correct: true, feedback: 'Perfekt! I-Typen reagieren auf Storys und emotionale Verbindungen, nicht nur auf Zahlen.' },
-        { text: '„Das ist unser Preis."', correct: false, feedback: 'Zu starr. I-Typen brauchen persönliche Verbindung und Storys.' }
+        { text: '„Unsere Konditionen sind im Leistungskatalog fix – ohne Anpassung des Nutzens bleiben wir bei der Liste, das ist für uns standardisiert."', correct: false, feedback: 'Zu starr. I-Typen brauchen persönliche Verbindung und Storys.' }
       ]
     },
     {
@@ -2747,7 +2811,7 @@ function Practice() {
       customerType: 'C-Typ (gewissenhaft, analytisch)',
       situation: '„Ihr Preis ist 20% höher als die Konkurrenz. Warum sollte ich das zahlen?"',
       options: [
-        { text: '„Das ist unser Preis."', correct: false, feedback: 'Zu starr. C-Typen wollen detaillierte Vergleiche und Begründungen.' },
+        { text: '„Unsere Konditionen sind im Leistungskatalog fix – ohne strukturierten Vergleich bleiben wir bei der Standardstaffel."', correct: false, feedback: 'Zu starr. C-Typen wollen detaillierte Vergleiche und Begründungen.' },
         { text: '„Lassen Sie uns die Gesamtkosten vergleichen – nicht nur den Preis. Hier ist eine detaillierte Analyse, die zeigt, warum wir langfristig günstiger sind."', correct: true, feedback: 'Perfekt! C-Typen reagieren auf detaillierte Analysen, Vergleiche und logische Argumente.' },
         { text: '„Wir sind besser."', correct: false, feedback: 'Zu vage. C-Typen wollen konkrete Daten und Vergleiche.' }
       ]
@@ -2769,7 +2833,7 @@ function Practice() {
       customerType: 'I-Typ (influencing, kommunikativ)',
       situation: '„Ich habe schon so viele schlechte Erfahrungen gemacht. Warum sollte ich Ihnen vertrauen?"',
       options: [
-        { text: '„Wir sind anders."', correct: false, feedback: 'Zu abstrakt. I-Typen brauchen emotionale Verbindung und Storys.' },
+        { text: '„Wir unterscheiden uns klar vom Markt – ohne konkreten Fallbezug, aber mit starkem Fokus auf Partnerschaft und Flexibilität."', correct: false, feedback: 'Zu abstrakt. I-Typen brauchen emotionale Verbindung und Storys.' },
         { text: '„Das tut mir leid, dass Sie diese Erfahrungen gemacht haben. Lassen Sie mich Ihnen zeigen, wie wir anderen Kunden in ähnlicher Situation geholfen haben – hier ist eine Erfolgsgeschichte..."', correct: true, feedback: 'Perfekt! I-Typen reagieren auf Empathie, emotionale Verbindung und Erfolgsgeschichten.' },
         { text: '„Das war nicht unsere Schuld."', correct: false, feedback: 'Zu defensiv. I-Typen brauchen Empathie und Verständnis.' }
       ]
@@ -2885,6 +2949,21 @@ function Practice() {
       ]
     }
   ]
+
+  const roleplayShuffledOptions = React.useMemo(() => {
+    if (activeMode !== 'roleplay') return []
+    const scenario = roleplayScenarios[roleplayScenarioIndex]
+    const options = scenario?.options
+    if (!Array.isArray(options) || options.length === 0) return []
+    const copy = [...options]
+    for (let i = copy.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1))
+      const tmp = copy[i]
+      copy[i] = copy[j]
+      copy[j] = tmp
+    }
+    return copy
+  }, [activeMode, roleplayScenarioIndex])
   
   // Herausforderungen
   const challenges = [
@@ -3067,7 +3146,7 @@ function Practice() {
         story: 'Sophie hat einen Zeit-Einwand: "Ich muss erst noch darüber nachdenken." Sie weiß, dass Zeit-Einwände oft versteckte Bedenken sind.',
         question: 'Wie sollte Sophie reagieren?',
         options: [
-          { text: '„Okay, melden Sie sich dann."', correct: false },
+          { text: '„Alles klar – dann melden Sie sich einfach, sobald es für Sie passt. Ich respektiere Ihre Entscheidungsfreiheit vollständig."', correct: false },
           { text: '„Natürlich! Was genau möchten Sie sich noch überlegen?"', correct: true },
           { text: '„Sie müssen sich jetzt entscheiden."', correct: false }
         ],
@@ -3092,6 +3171,56 @@ function Practice() {
           { text: 'Die wichtigsten ignorieren', correct: false }
         ],
         learningGoal: 'Mehrere Einwände systematisch priorisieren und behandeln'
+      },
+      {
+        story: 'Ein Kunde sagt: "Wir haben dafür gerade keine Ressourcen." Du spürst: Es ist eher Priorität als echte Ressourcenknappheit.',
+        question: 'Was ist die beste nächste Frage?',
+        options: [
+          { text: '„Dann hat es wohl keine Relevanz für Sie."', correct: false },
+          { text: '„Wie priorisieren Sie solche Themen aktuell – und was müsste passieren, damit es nach oben rutscht?"', correct: true },
+          { text: '„Kein Problem, ich schicke Ihnen einfach mal ein Angebot."', correct: false }
+        ],
+        learningGoal: 'Ressourcen-Einwand als Prioritätsfrage auflösen'
+      },
+      {
+        story: 'Der Kunde sagt: "Schicken Sie mir einfach Unterlagen." Du willst vermeiden, dass es versandet.',
+        question: 'Wie reagierst du professionell?',
+        options: [
+          { text: '„Klar, ich sende Ihnen alles zu."', correct: false },
+          { text: '„Gerne – wofür genau sollen die Unterlagen Ihnen helfen, und wann sprechen wir kurz darüber?"', correct: true },
+          { text: '„Unterlagen helfen nicht, Sie müssen erst eine Demo machen."', correct: false }
+        ],
+        learningGoal: '„Unterlagen“-Einwand in nächsten Schritt + Verbindlichkeit umwandeln'
+      },
+      {
+        story: 'Ein Kunde sagt: "Wir sind schon versorgt." Du vermutest: Bestehende Lösung ist okay, aber nicht optimal.',
+        question: 'Was ist die beste Strategie?',
+        options: [
+          { text: '„Dann brauchen Sie uns wohl nicht."', correct: false },
+          { text: '„Was läuft aktuell gut – und wo nervt es Sie noch (z. B. Aufwand, Qualität, Geschwindigkeit)?"', correct: true },
+          { text: '„Unsere Lösung ist definitiv besser."', correct: false }
+        ],
+        learningGoal: 'Status-quo-Einwand über gezielte Problemfragen öffnen'
+      },
+      {
+        story: 'Der Kunde blockt: "Ich entscheide das nicht." Du willst trotzdem Fortschritt machen.',
+        question: 'Was ist am sinnvollsten?',
+        options: [
+          { text: '„Dann macht das Gespräch keinen Sinn."', correct: false },
+          { text: '„Wer ist bei Ihnen typischerweise beteiligt – und was ist den Personen am wichtigsten?"', correct: true },
+          { text: '„Okay, ich rufe dann einfach den Chef direkt an."', correct: false }
+        ],
+        learningGoal: 'Authority-Einwand sauber klären und Buying Center identifizieren'
+      },
+      {
+        story: 'Der Kunde sagt: "Melden Sie sich in drei Monaten wieder." Du willst testen, ob es ein echter Zeitplan oder eine Abwehr ist.',
+        question: 'Welche Reaktion ist am besten?',
+        options: [
+          { text: '„Alles klar, ich melde mich dann."', correct: false },
+          { text: '„Gerne – was müsste bis dahin passiert sein, damit es dann wirklich Sinn ergibt?"', correct: true },
+          { text: '„Drei Monate sind zu lang, wir müssen jetzt abschließen."', correct: false }
+        ],
+        learningGoal: 'Zeitverschiebung validieren und klare Kriterien für „später“ definieren'
       }
     ],
     'question_techniques': [
@@ -3144,9 +3273,75 @@ function Practice() {
           { text: 'Closed Questions – liefern kurze Antworten', correct: false }
         ],
         learningGoal: 'Funnel-Fragen für strukturierte Informationssammlung'
+      },
+      {
+        story: 'Du startest ein Erstgespräch und willst Kontext sammeln, ohne den Kunden zu überfrachten.',
+        question: 'Welche Frage ist eine typische Situation Question?',
+        options: [
+          { text: '„Welche Tools/Prozesse nutzen Sie aktuell dafür?"', correct: true },
+          { text: '„Was kostet Sie das Problem pro Monat?"', correct: false },
+          { text: '„Wie wirkt sich das auf Ihre Ziele aus?"', correct: false }
+        ],
+        learningGoal: 'Situation Questions korrekt erkennen'
+      },
+      {
+        story: 'Der Kunde erwähnt vage: "Das ist manchmal nervig." Du willst den Schmerz präzisieren.',
+        question: 'Welche Frage ist eine gute Problem Question?',
+        options: [
+          { text: '„Was genau klappt heute nicht so, wie Sie es gerne hätten?"', correct: true },
+          { text: '„Wie viele Standorte haben Sie?"', correct: false },
+          { text: '„Wäre es Ihnen 10% günstiger lieber?"', correct: false }
+        ],
+        learningGoal: 'Problem Questions nutzen, um Schmerzpunkte greifbar zu machen'
+      },
+      {
+        story: 'Der Kunde hat ein Problem bestätigt, aber es wirkt noch nicht dringend.',
+        question: 'Welche Implication Question passt am besten?',
+        options: [
+          { text: '„Welche Auswirkungen hat das auf Umsatz/Qualität/Team, wenn es so bleibt?"', correct: true },
+          { text: '„Wer ist Ihr CEO?"', correct: false },
+          { text: '„Wann haben Sie Zeit für eine Demo?"', correct: false }
+        ],
+        learningGoal: 'Implication Questions: Konsequenzen und Dringlichkeit erzeugen'
+      },
+      {
+        story: 'Du willst, dass der Kunde den Nutzen der Lösung selbst formuliert (Need-Payoff).',
+        question: 'Welche Need-Payoff Question ist am besten?',
+        options: [
+          { text: '„Wie würde es Ihnen helfen, wenn Sie das in 2 Tagen statt in 2 Wochen schaffen?"', correct: true },
+          { text: '„Was ist Ihr Budget?"', correct: false },
+          { text: '„Warum haben Sie das nicht früher gelöst?"', correct: false }
+        ],
+        learningGoal: 'Need-Payoff: Kunden zur Selbstüberzeugung bringen'
+      },
+      {
+        story: 'Du willst im Gespräch vom Allgemeinen zur konkreten Entscheidung kommen, ohne zu pushy zu sein.',
+        question: 'Welche Technik beschreibt das am besten?',
+        options: [
+          { text: 'Funnel-Fragen (Trichtertechnik)', correct: true },
+          { text: 'Leading Questions (Suggestivfragen)', correct: false },
+          { text: 'Ja/Nein-Fragen (Closed Questions) als Standard', correct: false }
+        ],
+        learningGoal: 'Funnel-Technik bewusst einsetzen'
       }
     ]
   }
+
+  // Optionen pro Story mischen (Hooks dürfen nicht in if/return-Zweigen stehen)
+  const microShuffledOptions = React.useMemo(() => {
+    if (activeMode !== 'micro-learning' || !activeTopic) return []
+    const story = microStories[activeTopic]?.[microStoryIndex]
+    const options = story?.options
+    if (!Array.isArray(options) || options.length === 0) return []
+    const copy = [...options]
+    for (let i = copy.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1))
+      const tmp = copy[i]
+      copy[i] = copy[j]
+      copy[j] = tmp
+    }
+    return copy
+  }, [activeMode, activeTopic, microStoryIndex])
   
   // Lern-Insights: echte Daten laden wenn Nutzer „Insights anzeigen“ öffnet
   React.useEffect(() => {
@@ -3341,7 +3536,7 @@ function Practice() {
       setQuizAnswer(null)
     } else {
       setActiveMode(null)
-      markPracticeDay()
+      completePracticeMode('quiz')
       showToast('Quiz abgeschlossen!', 'success')
     }
   }
@@ -3480,7 +3675,7 @@ function Practice() {
         setFlashcardRating(null)
       } else {
         setActiveMode(null)
-        markPracticeDay()
+        completePracticeMode('flashcards')
         showToast('Karteikarten durchgearbeitet!', 'success')
       }
     }, 1000)
@@ -3508,7 +3703,7 @@ function Practice() {
       setRoleplayAnswer(null)
     } else {
       setActiveMode(null)
-      markPracticeDay()
+      completePracticeMode('roleplay')
     }
   }
 
@@ -3578,6 +3773,8 @@ function Practice() {
         if (data.evaluation) {
           setChallengeEvaluation(data.evaluation)
           showToast('Antwort erfolgreich analysiert', 'success')
+          markPracticeEvent('challenge')
+          logPracticeActivity('challenge')
         } else {
           console.error('No evaluation in response:', data)
           showToast('Fehler: Keine Bewertung erhalten', 'error')
@@ -3624,7 +3821,7 @@ function Practice() {
       setChallengeTimer(timer)
     } else {
       setActiveMode(null)
-      markPracticeDay()
+      completePracticeMode()
     }
   }
 
@@ -3660,7 +3857,7 @@ function Practice() {
       setMicroAnswer(null)
     } else {
       setActiveMode(null)
-      markPracticeDay()
+      completePracticeMode('micro-story')
     }
   }
 
@@ -3715,7 +3912,7 @@ function Practice() {
             <h3>Frage {quizQuestionIndex + 1}</h3>
             <p className="question-text">{question.question}</p>
             <div className="options-list">
-              {question.options.map((option, idx) => (
+              {quizShuffledOptions.map((option, idx) => (
                 <button
                   key={idx}
                   className={`option-btn ${quizAnswer === option ? (option.correct ? 'correct' : 'incorrect') : ''}`}
@@ -3795,7 +3992,18 @@ function Practice() {
   if (activeMode === 'roleplay') {
     const scenario = roleplayScenarios[roleplayScenarioIndex]
     const isLastScenario = roleplayScenarioIndex === roleplayScenarios.length - 1
-    
+    if (!scenario) {
+      return (
+        <div className="practice-container">
+          <div className="section-header">
+            <button type="button" className="btn-back" onClick={handleBack}>← Zurück</button>
+            <h2>Rollenspiel</h2>
+          </div>
+          <p style={{ padding: '1rem' }}>Szenario nicht gefunden. Bitte „Rollenspiel starten“ erneut wählen.</p>
+        </div>
+      )
+    }
+
     return (
       <div className="practice-container">
         <div className="section-header">
@@ -3811,7 +4019,7 @@ function Practice() {
               <p><strong>Situation:</strong> {scenario.situation}</p>
             </div>
             <div className="options-list">
-              {scenario.options.map((option, idx) => (
+              {roleplayShuffledOptions.map((option, idx) => (
                 <button
                   key={idx}
                   className={`option-btn ${roleplayAnswer === option ? (option.correct ? 'correct' : 'incorrect') : ''}`}
@@ -3981,8 +4189,19 @@ function Practice() {
 
   if (activeMode === 'micro-learning') {
     const stories = microStories[activeTopic]
-    const story = stories[microStoryIndex]
-    
+    const story = stories?.[microStoryIndex]
+    if (!story) {
+      return (
+        <div className="practice-container">
+          <div className="section-header">
+            <button type="button" className="btn-back" onClick={handleBack}>← Zurück</button>
+            <h2>Mikro-Learning</h2>
+          </div>
+          <p style={{ padding: '1rem' }}>Inhalt konnte nicht geladen werden. Bitte noch einmal „Einwände“ oder „SPIN“ wählen.</p>
+        </div>
+      )
+    }
+
     return (
       <div className="practice-container">
         <div className="section-header">
@@ -3999,7 +4218,7 @@ function Practice() {
             <div className="interactive-question">
               <h3>{story.question}</h3>
               <div className="options-list">
-                {story.options.map((option, idx) => (
+                {microShuffledOptions.map((option, idx) => (
                   <button
                     key={idx}
                     className={`option-btn ${microAnswer === option ? (option.correct ? 'correct' : 'incorrect') : ''}`}
@@ -4166,8 +4385,8 @@ function Scenarios({ embedded = false } = {}) {
   const [scenarios, setScenarios] = React.useState([])
   const [filteredScenarios, setFilteredScenarios] = React.useState([])
   const [selectedIndustry, setSelectedIndustry] = React.useState('all')
-  const [selectedScenario, setSelectedScenario] = React.useState(null)
   const [activeScenario, setActiveScenario] = React.useState(null)
+  const [showExitConfirm, setShowExitConfirm] = React.useState(false)
   const [currentPhaseIndex, setCurrentPhaseIndex] = React.useState(0)
   const [currentTaskIndex, setCurrentTaskIndex] = React.useState(0)
   const [selectedAnswer, setSelectedAnswer] = React.useState(null)
@@ -4248,27 +4467,46 @@ function Scenarios({ embedded = false } = {}) {
     setSelectedIndustry(industry)
   }
 
+  const shuffleInPlace = (arr) => {
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1))
+      const tmp = arr[i]
+      arr[i] = arr[j]
+      arr[j] = tmp
+    }
+    return arr
+  }
+
+  const shuffleAndRenumberOptions = (options) => {
+    const copy = Array.isArray(options) ? options.map(o => ({ ...o })) : []
+    shuffleInPlace(copy)
+    return copy.map((o, idx) => ({ ...o, id: idx + 1 }))
+  }
+
   const startScenario = (scenarioId) => {
     const scenario = scenarios.find(s => s.id === scenarioId)
     if (scenario) {
-      setSelectedScenario(scenario)
-    }
-  }
+      const shuffledScenario = scenario?.phases
+        ? {
+            ...scenario,
+            phases: (scenario.phases || []).map((phase) => ({
+              ...phase,
+              tasks: (phase.tasks || []).map((task) => ({
+                ...task,
+                options: shuffleAndRenumberOptions(task.options),
+              })),
+            })),
+          }
+        : scenario
 
-  const closeModal = () => {
-    setSelectedScenario(null)
-  }
-
-  const beginScenario = () => {
-    if (selectedScenario) {
-      setActiveScenario(selectedScenario)
+      setActiveScenario(shuffledScenario)
+      setShowExitConfirm(false)
       setCurrentPhaseIndex(0)
       setCurrentTaskIndex(0)
       setSelectedAnswer(null)
       setShowFeedback(false)
       setScore(0)
       setCompletedTasks([])
-      setSelectedScenario(null)
     }
   }
 
@@ -4322,15 +4560,18 @@ function Scenarios({ embedded = false } = {}) {
   }
 
   const exitScenario = () => {
-    if (confirm('Möchten Sie das Szenario wirklich beenden? Der Fortschritt geht verloren.')) {
-      setActiveScenario(null)
-      setCurrentPhaseIndex(0)
-      setCurrentTaskIndex(0)
-      setSelectedAnswer(null)
-      setShowFeedback(false)
-      setScore(0)
-      setCompletedTasks([])
-    }
+    setShowExitConfirm(true)
+  }
+
+  const confirmExitScenario = () => {
+    setActiveScenario(null)
+    setShowExitConfirm(false)
+    setCurrentPhaseIndex(0)
+    setCurrentTaskIndex(0)
+    setSelectedAnswer(null)
+    setShowFeedback(false)
+    setScore(0)
+    setCompletedTasks([])
   }
 
   // Aktive Szenario-Durchführung
@@ -4344,7 +4585,22 @@ function Scenarios({ embedded = false } = {}) {
     return (
       <div className="scenario-active-container">
         <div className="scenario-header">
-          <button className="btn-back" onClick={exitScenario}>← Beenden</button>
+          <div className="scenario-exit-area">
+            <button className="btn-back" onClick={() => setShowExitConfirm(true)}>← Beenden</button>
+            {showExitConfirm && (
+              <div className="scenario-exit-confirm">
+                <p>Möchtest du das Szenario wirklich beenden? Der Fortschritt geht verloren.</p>
+                <div className="scenario-exit-actions">
+                  <button type="button" className="btn btn-danger btn-sm" onClick={confirmExitScenario}>
+                    Ja, beenden
+                  </button>
+                  <button type="button" className="btn btn-outline btn-sm" onClick={() => setShowExitConfirm(false)}>
+                    Abbrechen
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
           <div className="scenario-title">
             <h2>🎯 {activeScenario.title}</h2>
             <div className="scenario-progress">
@@ -4518,49 +4774,6 @@ function Scenarios({ embedded = false } = {}) {
         </div>
       )}
 
-      {selectedScenario && (
-        <div className="modal-overlay" onClick={closeModal}>
-          <div className="modal-content" onClick={e => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2>🎯 {selectedScenario.title}</h2>
-              <button className="close-btn" onClick={closeModal}>×</button>
-            </div>
-            <div className="scenario-details">
-              <div className="scenario-info">
-                <h3>📋 Situation:</h3>
-                <p>{selectedScenario.situation || selectedScenario.description}</p>
-                <h3>🎯 Herausforderung:</h3>
-                <p>{selectedScenario.challenge || 'Meistere dieses Verkaufsszenario mit professionellen Techniken.'}</p>
-                <h3>🏆 Ziel:</h3>
-                <p>{selectedScenario.goal || 'Erfolgreich verkaufen und Kunden überzeugen.'}</p>
-                {selectedScenario.timeLimit && (
-                  <p><strong>⏱️ Zeitlimit:</strong> {selectedScenario.timeLimit} Minuten</p>
-                )}
-                {selectedScenario.phases && (
-                  <div className="phases-preview">
-                    <h4>Phasen:</h4>
-                    <ul>
-                      {selectedScenario.phases.map((phase, idx) => (
-                        <li key={idx}>
-                          {phase.title} ({phase.tasks.length} Aufgaben)
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-              </div>
-              <div className="scenario-actions">
-                <button className="btn primary" onClick={beginScenario}>
-                  Szenario starten
-                </button>
-                <button className="btn secondary" onClick={closeModal}>
-                  Schließen
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }
@@ -4609,12 +4822,85 @@ function sanitizeHighlightHtml(html) {
 }
 
 const HIGHLIGHT_COLORS = [
-  { name: 'Gelb', value: '#b45309' },
-  { name: 'Grün', value: '#166534' },
-  { name: 'Orange', value: '#c2410c' },
-  { name: 'Blau', value: '#1e40af' },
-  { name: 'Rosa', value: '#9d174d' }
+  { name: 'Gelb', dark: '#b45309', light: '#fbbf24' },
+  { name: 'Grün', dark: '#166534', light: '#4ade80' },
+  { name: 'Orange', dark: '#c2410c', light: '#fb923c' },
+  { name: 'Blau', dark: '#1e40af', light: '#60a5fa' },
+  { name: 'Rosa', dark: '#9d174d', light: '#f472b6' }
 ]
+
+function getThemeName() {
+  try {
+    return document?.documentElement?.dataset?.theme === 'light' ? 'light' : 'dark'
+  } catch (_) {
+    return 'dark'
+  }
+}
+
+function applyHighlightThemeMapping(html, themeName) {
+  const theme = themeName === 'light' ? 'light' : 'dark'
+  const raw = String(html || '')
+  if (!raw) return raw
+
+  // Robust: gespeicherte Farben kommen oft als rgb()/rgba() zurück; deshalb normalisieren wir über den Browser.
+  const normalizeToHex = (input) => {
+    try {
+      if (!input) return null
+      const el = document.createElement('div')
+      el.style.backgroundColor = String(input)
+      el.style.position = 'absolute'
+      el.style.left = '-9999px'
+      el.style.top = '-9999px'
+      document.body.appendChild(el)
+      const rgb = window.getComputedStyle(el).backgroundColor || ''
+      document.body.removeChild(el)
+      const m = rgb.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([0-9.]+))?\)/i)
+      if (!m) return null
+      const r = Number(m[1]), g = Number(m[2]), b = Number(m[3])
+      const a = m[4] == null ? 1 : Number(m[4])
+      if (!Number.isFinite(r) || !Number.isFinite(g) || !Number.isFinite(b) || !Number.isFinite(a)) return null
+      if (a === 0) return null
+      const to2 = (n) => n.toString(16).padStart(2, '0')
+      return `#${to2(r)}${to2(g)}${to2(b)}`.toLowerCase()
+    } catch (_) {
+      return null
+    }
+  }
+
+  const darkToLight = new Map()
+  const lightToDark = new Map()
+  for (const c of HIGHLIGHT_COLORS) {
+    const darkHex = normalizeToHex(c.dark)
+    const lightHex = normalizeToHex(c.light)
+    if (darkHex && lightHex) {
+      darkToLight.set(darkHex, c.light)
+      lightToDark.set(lightHex, c.dark)
+    }
+  }
+
+  try {
+    const tpl = document.createElement('template')
+    tpl.innerHTML = raw
+    const spans = tpl.content.querySelectorAll('span[style]')
+    spans.forEach((span) => {
+      const bg = span.style.backgroundColor || span.style.background
+      if (!bg) return
+      const bgHex = normalizeToHex(bg)
+      if (!bgHex) return
+      if (theme === 'light') {
+        const mapped = darkToLight.get(bgHex)
+        if (mapped) span.style.backgroundColor = mapped
+      } else {
+        const mapped = lightToDark.get(bgHex)
+        if (mapped) span.style.backgroundColor = mapped
+      }
+    })
+    return tpl.innerHTML
+  } catch (_) {
+    // Fallback: unverändert
+    return raw
+  }
+}
 
 // Leitfaden-Generator: Kapitel mit je mehreren Formulierungs-Varianten
 // Angepasst für Kaltakquise im Callcenter (telefonisch, ohne persönliche Präsenz)
@@ -4878,7 +5164,9 @@ function LeitfadenGenerator() {
 
   React.useEffect(() => {
     if (editingId && editContentRef.current) {
-      editContentRef.current.innerHTML = (sanitizeHighlightHtml(editingText) || '').replace(/\n/g, '<br>') || ''
+      const themeName = getThemeName()
+      const sanitized = (sanitizeHighlightHtml(editingText) || '').replace(/\n/g, '<br>') || ''
+      editContentRef.current.innerHTML = applyHighlightThemeMapping(sanitized, themeName)
     }
   }, [editingId])
 
@@ -4903,6 +5191,7 @@ function LeitfadenGenerator() {
     const range = sel.getRangeAt(0)
     if (range.collapsed) return
     const span = document.createElement('span')
+    // Speichere immer die Dark-Farbe; Light-Mode wird nur in der Darstellung gemappt.
     span.style.background = color
     try {
       range.surroundContents(span)
@@ -5355,8 +5644,16 @@ function LeitfadenGenerator() {
                       <div className="leitfaden-edit-wrapper">
                         <div className="leitfaden-highlight-toolbar">
                           <span className="leitfaden-highlight-label">Markierung:</span>
-                          {HIGHLIGHT_COLORS.map(({ name, value }) => (
-                            <button key={value} type="button" className="leitfaden-highlight-btn" style={{ background: value }} onMouseDown={(e) => { e.preventDefault(); applyHighlight(value); }} title={name} aria-label={name} />
+                          {HIGHLIGHT_COLORS.map(({ name, dark, light }) => (
+                            <button
+                              key={dark}
+                              type="button"
+                              className="leitfaden-highlight-btn"
+                              style={{ background: getThemeName() === 'light' ? light : dark }}
+                              onMouseDown={(e) => { e.preventDefault(); applyHighlight(dark) }}
+                              title={name}
+                              aria-label={name}
+                            />
                           ))}
                           <button type="button" className="leitfaden-highlight-remove" onMouseDown={(e) => { e.preventDefault(); removeHighlight(); }} title="Markierung entfernen">✕</button>
                         </div>
@@ -5388,7 +5685,7 @@ function LeitfadenGenerator() {
                         className="leitfaden-list-text" 
                         onClick={() => startEditing(item)}
                         title="Klicken zum Bearbeiten"
-                        dangerouslySetInnerHTML={{ __html: sanitizeHighlightHtml(item.text || '').replace(/\n/g, '<br>') || '&nbsp;' }}
+                        dangerouslySetInnerHTML={{ __html: applyHighlightThemeMapping((sanitizeHighlightHtml(item.text || '').replace(/\n/g, '<br>') || '&nbsp;'), getThemeName()) }}
                       />
                       <div className="leitfaden-item-actions">
                         <div className="leitfaden-item-badges">
@@ -5754,6 +6051,7 @@ function MeineLeitfaeden() {
   const [selectedGuideIsSharedPreview, setSelectedGuideIsSharedPreview] = React.useState(false)
   const [viewMode, setViewMode] = React.useState('full') // 'full' or 'bullets'
   const [showDeleteConfirm, setShowDeleteConfirm] = React.useState(null)
+  const [showDeleteSharedConfirm, setShowDeleteSharedConfirm] = React.useState(null)
   const [convertedBullets, setConvertedBullets] = React.useState([])
   const [convertingBullets, setConvertingBullets] = React.useState(false)
   const [selectedUSP, setSelectedUSP] = React.useState(null)
@@ -5879,11 +6177,11 @@ function MeineLeitfaeden() {
     canDeleteAnySharedGuide || String(g.shared_by) === String(user?.id)
 
   const handleDeleteSharedGuideEntry = async (id) => {
-    if (!window.confirm('Diesen geteilten Leitfaden aus dem Intern-Pool entfernen?')) return
     try {
       const res = await apiFetch(`/api/shared/guides/${id}`, { method: 'DELETE' })
       if (res.ok) {
         setSharedGuides(prev => prev.filter(x => x.id !== id))
+        setShowDeleteSharedConfirm(null)
         showToast('Geteilter Leitfaden entfernt', 'success')
       } else {
         const d = await res.json().catch(() => ({}))
@@ -6198,7 +6496,7 @@ function MeineLeitfaeden() {
                     {selectedGuide.items.map((item, idx) => (
                       <li key={idx} className="leitfaden-viewer-item">
                         <span className="leitfaden-viewer-num">{idx + 1}.</span>
-                        <span className="leitfaden-viewer-text" dangerouslySetInnerHTML={{ __html: sanitizeHighlightHtml(item.text || '').replace(/\n/g, '<br>') || '&nbsp;' }} />
+                        <span className="leitfaden-viewer-text" dangerouslySetInnerHTML={{ __html: applyHighlightThemeMapping((sanitizeHighlightHtml(item.text || '').replace(/\n/g, '<br>') || '&nbsp;'), getThemeName()) }} />
                       </li>
                     ))}
                   </ol>
@@ -6217,7 +6515,18 @@ function MeineLeitfaeden() {
                         </ul>
                         <div className="leitfaden-bullets-actions" style={{ marginTop: '1rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                           {!selectedGuideIsSharedPreview && (
-                            <button type="button" className="btn btn-outline btn-sm" onClick={() => { setBulletsEditText(convertedBullets.map(b => (b.startsWith('•') ? b.slice(1).trim() : b)).join('\n')); setEditingBullets(true) }}>
+                            <button
+                              type="button"
+                              className="btn btn-outline btn-sm"
+                              onClick={() => {
+                                const lines = convertedBullets
+                                  .map(b => (b.startsWith('•') ? b.slice(1).trim() : b))
+                                  .map(b => String(b || '').trim())
+                                  .filter(Boolean)
+                                setBulletsEditText(JSON.stringify(lines))
+                                setEditingBullets(true)
+                              }}
+                            >
                               Manuell bearbeiten
                             </button>
                           )}
@@ -6256,36 +6565,84 @@ function MeineLeitfaeden() {
                       </>
                     ) : editingBullets ? (
                       <div>
-                        <textarea
-                          className="leitfaden-bullets-edit"
-                          value={bulletsEditText}
-                          onChange={e => setBulletsEditText(e.target.value)}
-                          rows={12}
-                          style={{ width: '100%', padding: '0.75rem', marginBottom: '0.5rem' }}
-                          placeholder="Ein Stichpunkt pro Zeile"
-                        />
-                        <div style={{ display: 'flex', gap: '0.5rem' }}>
-                          <button type="button" className="btn btn-primary btn-sm" onClick={async () => {
-                            const lines = bulletsEditText.split('\n').map(l => l.trim()).filter(Boolean).map(l => l.replace(/^•\s*/, ''))
-                            try {
-                              const patchRes = await apiFetch(`/api/guides/${selectedGuide.id}/bullets`, { method: 'PATCH', body: JSON.stringify({ bullets: lines }) })
-                              if (patchRes.ok) {
-                                const patchData = await patchRes.json()
-                                const g = patchData.guide
-                                setConvertedBullets((g.bullets || []).map(b => (b.startsWith('•') ? b : `• ${b}`)))
-                                setSelectedGuide(prev => prev?.id === g.id ? { ...prev, bullets: g.bullets } : prev)
-                                setGuides(prev => prev.map(x => x.id === g.id ? { ...x, bullets: g.bullets } : x))
-                                setEditingBullets(false)
-                                showToast('Stichpunkte gespeichert', 'success')
-                              }
-                            } catch (e) {
-                              showToast('Fehler beim Speichern', 'error')
-                            }
-                          }}>
-                            Speichern
-                          </button>
-                          <button type="button" className="btn btn-outline btn-sm" onClick={() => setEditingBullets(false)}>Abbrechen</button>
-                        </div>
+                        {(() => {
+                          let draft = []
+                          try { draft = JSON.parse(bulletsEditText || '[]') } catch (_) { draft = [] }
+                          if (!Array.isArray(draft)) draft = []
+
+                          const setDraft = (next) => setBulletsEditText(JSON.stringify(next))
+
+                          return (
+                            <>
+                              <ul className="leitfaden-viewer-bullets leitfaden-viewer-bullets--edit">
+                                {draft.map((val, idx) => (
+                                  <li key={idx} className="leitfaden-viewer-bullet leitfaden-viewer-bullet--edit">
+                                    <span className="leitfaden-viewer-bullet-dot">•</span>
+                                    <input
+                                      className="leitfaden-viewer-bullet-input"
+                                      value={val}
+                                      onChange={(e) => {
+                                        const next = draft.slice()
+                                        next[idx] = e.target.value
+                                        setDraft(next)
+                                      }}
+                                      placeholder="Stichpunkt..."
+                                    />
+                                    <button
+                                      type="button"
+                                      className="leitfaden-viewer-bullet-remove"
+                                      onClick={() => {
+                                        const next = draft.slice()
+                                        next.splice(idx, 1)
+                                        setDraft(next)
+                                      }}
+                                      aria-label="Stichpunkt entfernen"
+                                      title="Entfernen"
+                                    >
+                                      ✕
+                                    </button>
+                                  </li>
+                                ))}
+                              </ul>
+                              <div className="leitfaden-bullets-actions" style={{ marginTop: '0.75rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                                <button
+                                  type="button"
+                                  className="btn btn-outline btn-sm"
+                                  onClick={() => setDraft([...draft, ''])}
+                                >
+                                  + Stichpunkt
+                                </button>
+                                <button
+                                  type="button"
+                                  className="btn btn-primary btn-sm"
+                                  onClick={async () => {
+                                    const lines = (draft || [])
+                                      .map(l => String(l || '').trim())
+                                      .filter(Boolean)
+                                      .map(l => l.replace(/^•\s*/, ''))
+                                    try {
+                                      const patchRes = await apiFetch(`/api/guides/${selectedGuide.id}/bullets`, { method: 'PATCH', body: JSON.stringify({ bullets: lines }) })
+                                      if (patchRes.ok) {
+                                        const patchData = await patchRes.json()
+                                        const g = patchData.guide
+                                        setConvertedBullets((g.bullets || []).map(b => (b.startsWith('•') ? b : `• ${b}`)))
+                                        setSelectedGuide(prev => prev?.id === g.id ? { ...prev, bullets: g.bullets } : prev)
+                                        setGuides(prev => prev.map(x => x.id === g.id ? { ...x, bullets: g.bullets } : x))
+                                        setEditingBullets(false)
+                                        showToast('Stichpunkte gespeichert', 'success')
+                                      }
+                                    } catch (e) {
+                                      showToast('Fehler beim Speichern', 'error')
+                                    }
+                                  }}
+                                >
+                                  Speichern
+                                </button>
+                                <button type="button" className="btn btn-outline btn-sm" onClick={() => setEditingBullets(false)}>Abbrechen</button>
+                              </div>
+                            </>
+                          )
+                        })()}
                       </div>
                     ) : (
                       <ul className="leitfaden-viewer-bullets">
@@ -6453,9 +6810,22 @@ function MeineLeitfaeden() {
                     <button type="button" className="btn btn-outline btn-sm" onClick={() => openSharedGuidePreview(g)}>Direkt ansehen</button>
                     <button type="button" className="btn btn-primary btn-sm" onClick={() => handleCopySharedGuideToMe(g)}>Kopie zu mir</button>
                     {canDeleteSharedGuideRow(g) && (
-                      <button type="button" className="btn btn-danger btn-sm" onClick={() => handleDeleteSharedGuideEntry(g.id)}>Aus Pool löschen</button>
+                      <button type="button" className="btn btn-danger btn-sm" onClick={() => setShowDeleteSharedConfirm(g.id)}>Aus Pool löschen</button>
                     )}
                   </span>
+                  {showDeleteSharedConfirm === g.id && (
+                    <div className="meine-leitfaeden-delete-confirm" style={{ width: '100%', marginTop: '0.75rem' }}>
+                      <p>Möchtest du diesen geteilten Leitfaden wirklich aus dem Pool löschen?</p>
+                      <div className="meine-leitfaeden-delete-actions">
+                        <button className="btn btn-danger" onClick={() => handleDeleteSharedGuideEntry(g.id)}>
+                          Ja, löschen
+                        </button>
+                        <button className="btn btn-outline" onClick={() => setShowDeleteSharedConfirm(null)}>
+                          Abbrechen
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </li>
               ))}
             </ul>
@@ -6477,6 +6847,7 @@ function InternSharedPage() {
   const [loadingFormulations, setLoadingFormulations] = React.useState(true)
   const [loadingGuides, setLoadingGuides] = React.useState(true)
   const [loadingMyGuides, setLoadingMyGuides] = React.useState(true)
+  const [showDeleteSharedConfirm, setShowDeleteSharedConfirm] = React.useState(null)
 
   const activeTab = React.useMemo(() => {
     const t = (searchParams.get('tab') || '').toLowerCase()
@@ -6617,11 +6988,11 @@ function InternSharedPage() {
   }
 
   const handleDeleteSharedGuide = async (id) => {
-    if (!window.confirm('Diesen geteilten Leitfaden aus dem Intern-Pool entfernen?')) return
     try {
       const res = await apiFetch(`/api/shared/guides/${id}`, { method: 'DELETE' })
       if (res.ok) {
         loadSharedGuides()
+        setShowDeleteSharedConfirm(null)
         showToast('Geteilter Leitfaden entfernt', 'success')
       } else {
         const d = await res.json().catch(() => ({}))
@@ -6722,9 +7093,22 @@ function InternSharedPage() {
                     <button type="button" className="btn btn-outline btn-sm" onClick={() => navigate('/leitfaden/meine', { state: { sharedPreview: g } })}>Direkt ansehen</button>
                     <button type="button" className="btn btn-primary btn-sm" onClick={() => handleCopyGuideToMe(g)}>Kopie in meine Leitfäden</button>
                     {canDeleteSharedGuideRow(g) && (
-                      <button type="button" className="btn btn-danger btn-sm" onClick={() => handleDeleteSharedGuide(g.id)}>Aus Pool löschen</button>
+                      <button type="button" className="btn btn-danger btn-sm" onClick={() => setShowDeleteSharedConfirm(g.id)}>Aus Pool löschen</button>
                     )}
                   </div>
+                  {showDeleteSharedConfirm === g.id && (
+                    <div className="meine-leitfaeden-delete-confirm" style={{ width: '100%', marginTop: '0.75rem' }}>
+                      <p>Möchtest du diesen geteilten Leitfaden wirklich aus dem Pool löschen?</p>
+                      <div className="meine-leitfaeden-delete-actions">
+                        <button className="btn btn-danger" onClick={() => handleDeleteSharedGuide(g.id)}>
+                          Ja, löschen
+                        </button>
+                        <button className="btn btn-outline" onClick={() => setShowDeleteSharedConfirm(null)}>
+                          Abbrechen
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </li>
               ))}
               {sharedGuides.length === 0 && <li style={{ color: '#666' }}>Noch keine geteilten Leitfäden.</li>}
@@ -6759,6 +7143,8 @@ function Progress() {
     const fallbackProgress = {
       progress: [],
       trainingActivity: [],
+      practiceActivity: [],
+      practiceActivityCount: 0,
       totalScenarios: 0,
       practiceStreak: { streakDays: 0, currentWeekPracticeDays: 0, currentWeekSecured: false, currentWeekStart: null },
     }
@@ -6830,10 +7216,22 @@ function Progress() {
 
   const progress = progressData?.progress || []
   const trainingActivity = progressData?.trainingActivity || []
+  const practiceActivity = progressData?.practiceActivity || []
+  const practiceActivityCount = progressData?.practiceActivityCount ?? 0
   const practiceStreak = progressData?.practiceStreak || { streakDays: 0, currentWeekPracticeDays: 0, currentWeekSecured: false, currentWeekStart: null }
+  const missions = progressData?.missions || { challengeDoneThisWeek: false, challengeDaysThisWeek: 0 }
   const completedScenarios = progress.filter(p => p.completed).length
   const completedTrainings = trainingActivity.length
-  const totalXP = completedScenarios * 100 + completedTrainings * 50
+  const PRACTICE_ACTIVITY_XP = { quiz: 25, flashcards: 25, roleplay: 25, challenge: 25, 'micro-story': 25 }
+  const PRACTICE_ACTIVITY_LABELS = {
+    quiz: 'Quiz',
+    flashcards: 'Karteikarten',
+    roleplay: 'Rollenspiel',
+    challenge: 'Herausforderung',
+    'micro-story': 'Mikro-Story',
+  }
+  const practiceXpTotal = practiceActivityCount * 25
+  const totalXP = completedScenarios * 100 + completedTrainings * 50 + practiceXpTotal
   const level = Math.floor(totalXP / 500) + 1
   const trainingProgressPct = (completedTrainings / TOTAL_TRAINING_MODULES) * 100
 
@@ -6848,11 +7246,19 @@ function Progress() {
 
   const recentActivity = [
     ...trainingActivity.map(t => ({
+      key: `t-${t.module_id}-${t.completed_at}`,
       at: t.completed_at ? new Date(t.completed_at).getTime() : 0,
       date: t.completed_at ? new Date(t.completed_at).toLocaleDateString('de-DE') : '',
       activity: `${TRAINING_MODULE_NAMES[t.module_id] || t.module_id}-Training abgeschlossen`,
-      xp: 50
-    }))
+      xp: 50,
+    })),
+    ...practiceActivity.map((p, i) => ({
+      key: `p-${p.completed_at}-${i}-${p.activity_type}`,
+      at: p.completed_at ? new Date(p.completed_at).getTime() : 0,
+      date: p.completed_at ? new Date(p.completed_at).toLocaleDateString('de-DE') : '',
+      activity: `${PRACTICE_ACTIVITY_LABELS[p.activity_type] || p.activity_type} (Übungsmodus)`,
+      xp: PRACTICE_ACTIVITY_XP[p.activity_type] ?? 25,
+    })),
   ].sort((a, b) => b.at - a.at).slice(0, 10)
 
   return (
@@ -6900,6 +7306,30 @@ function Progress() {
         </div>
       </div>
 
+      <div className="progress-sections">
+        <div className="progress-section">
+          <h3>Missionen</h3>
+          <div className="activity-list">
+            <div className="activity-item" style={{ borderBottom: 'none' }}>
+              <div className="activity-description">
+                <strong>Herausforderung (Übung)</strong>
+                <div style={{ marginTop: '0.25rem', color: 'var(--muted)' }}>
+                  Schließe diese Woche mindestens 1 Herausforderung im Übungsmodus ab.
+                </div>
+              </div>
+              <div className="activity-xp" style={{ borderColor: missions.challengeDoneThisWeek ? '#28a745' : 'var(--border)', color: missions.challengeDoneThisWeek ? '#28a745' : 'var(--muted)' }}>
+                {missions.challengeDoneThisWeek ? 'Erledigt' : 'Offen'}
+              </div>
+            </div>
+          </div>
+          {!missions.challengeDoneThisWeek && (
+            <p style={{ marginTop: '0.75rem', color: 'var(--muted)' }}>
+              Tipp: Übungsmodus → Herausforderung auswählen → Antwort analysieren lassen.
+            </p>
+          )}
+        </div>
+      </div>
+
       <div className="achievements-section">
         <h3>Erfolge</h3>
         <div className="achievements-grid">
@@ -6921,10 +7351,10 @@ function Progress() {
         <h3>Letzte Aktivitäten</h3>
         <div className="activity-list">
           {recentActivity.length === 0 ? (
-            <p className="activity-empty">Noch keine Aktivitäten. Starte ein Training!</p>
+            <p className="activity-empty">Noch keine Aktivitäten. Starte ein Training oder den Übungsmodus.</p>
           ) : (
-            recentActivity.map((activity, idx) => (
-            <div key={idx} className="activity-item">
+            recentActivity.map((activity) => (
+            <div key={activity.key} className="activity-item">
               <div className="activity-date">{activity.date}</div>
               <div className="activity-description">{activity.activity}</div>
               <div className="activity-xp">+{activity.xp} XP</div>

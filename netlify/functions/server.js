@@ -34643,6 +34643,37 @@ async function initializeDatabase() {
       )
     `;
     await sql`
+      CREATE TABLE IF NOT EXISTS user_practice_days (
+        id SERIAL PRIMARY KEY,
+        user_id VARCHAR(255) NOT NULL,
+        day_date DATE NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(user_id, day_date)
+      )
+    `;
+    await sql`
+      CREATE TABLE IF NOT EXISTS user_practice_events (
+        id SERIAL PRIMARY KEY,
+        user_id VARCHAR(255) NOT NULL,
+        event_type VARCHAR(64) NOT NULL,
+        day_date DATE NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(user_id, event_type, day_date)
+      )
+    `;
+    await sql`
+      CREATE TABLE IF NOT EXISTS user_practice_activity (
+        id SERIAL PRIMARY KEY,
+        user_id VARCHAR(255) NOT NULL,
+        activity_type VARCHAR(64) NOT NULL,
+        completed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `;
+    try {
+      await sql`CREATE INDEX IF NOT EXISTS idx_user_practice_activity_user_completed ON user_practice_activity (user_id, completed_at DESC)`;
+    } catch (_2) {
+    }
+    await sql`
       CREATE TABLE IF NOT EXISTS user_question_stats (
         id SERIAL PRIMARY KEY,
         user_id VARCHAR(255) NOT NULL,
@@ -34718,6 +34749,57 @@ function canModerateSharedThomasBoekeContent(req) {
   if (!email || typeof email !== "string") return false;
   const n = email.trim().toLowerCase();
   return n === "j.steiner@thomas-boeke.com";
+}
+function pad2(n) {
+  return String(n).padStart(2, "0");
+}
+function toLocalDayString(d) {
+  const year = d.getFullYear();
+  const month = pad2(d.getMonth() + 1);
+  const day = pad2(d.getDate());
+  return `${year}-${month}-${day}`;
+}
+function getLocalWeekStart(d) {
+  const localMidnight = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const day = localMidnight.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  localMidnight.setDate(localMidnight.getDate() + diff);
+  return localMidnight;
+}
+function dayStringToLocalDate(dayString) {
+  return /* @__PURE__ */ new Date(`${dayString}T00:00:00`);
+}
+function computePracticeStreak(practiceDayDates, now = /* @__PURE__ */ new Date()) {
+  const currentWeekStart = getLocalWeekStart(now);
+  const currentWeekStartKey = toLocalDayString(currentWeekStart);
+  const weekCount = /* @__PURE__ */ new Map();
+  for (const ds2 of practiceDayDates || []) {
+    if (!ds2) continue;
+    const dayDate = ds2 instanceof Date ? ds2 : dayStringToLocalDate(String(ds2));
+    const ws2 = getLocalWeekStart(dayDate);
+    const key = toLocalDayString(ws2);
+    weekCount.set(key, (weekCount.get(key) || 0) + 1);
+  }
+  const getWeekCount = (weekStartDate) => weekCount.get(toLocalDayString(weekStartDate)) || 0;
+  let streakDays = getWeekCount(currentWeekStart);
+  const maxWeeksToScan = 156;
+  const weekCursor = new Date(currentWeekStart);
+  for (let i = 1; i <= maxWeeksToScan; i++) {
+    weekCursor.setDate(weekCursor.getDate() - 7);
+    const cnt = getWeekCount(weekCursor);
+    if (cnt >= 3) {
+      streakDays += cnt;
+    } else {
+      break;
+    }
+  }
+  const currentWeekPracticeDays = getWeekCount(currentWeekStart);
+  return {
+    streakDays,
+    currentWeekPracticeDays,
+    currentWeekSecured: currentWeekPracticeDays >= 3,
+    currentWeekStart: currentWeekStartKey
+  };
 }
 function hashPassword(password) {
   const salt = import_crypto.default.randomBytes(16).toString("hex");
@@ -34937,14 +35019,17 @@ async function generateObjectionResponses(usps) {
 
 WICHTIG:
 - Die ANTWORTEN sind zum direkten Vorlesen im Verkaufsgespr\xE4ch gedacht. Formuliere sie gesprochen, konkret und zur jeweiligen Einwand-Situation passend.
-- Du DARFST die USPs interpretieren und situationsbezogen zuspitzen \u2013 die Antwort muss NICHT w\xF6rtlich vom Website-Text stammen, sondern perfekt zum Einwand passen (z.B. bei "zu teuer" eine echte Preis-/ROI-Antwort, bei "keine Zeit" eine echte Zeitersparnis-Formulierung).
-- Jede Antwort: 2\u20134 S\xE4tze, Du- bzw. Sie-Form, so dass der Verk\xE4ufer sie 1:1 sagen kann. Keine vagen Floskeln.
+- Kontext: Das sind Leitf\xE4den f\xFCr Call-Center-Agenten. Sie haben i.d.R. KEINE Preisverhandlungsmacht und rechnen keine individuellen ROI-/Preis-Szenarien live durch.
+- Ziel: Einw\xE4nde entkr\xE4ften, Nutzen schmackhaft machen, Gespr\xE4ch offen halten. Nenne keinen Termin aktiv; bleibe allgemein (\u201Eweiteres Vorgehen\u201C, \u201Ekurz pr\xFCfen\u201C, \u201EDetails kl\xE4ren\u201C), ohne Meeting-/Termin-Wording.
+- Du DARFST die USPs interpretieren und situationsbezogen zuspitzen \u2013 die Antwort muss NICHT w\xF6rtlich vom Website-Text stammen, sondern perfekt zum Einwand passen (z.B. bei "zu teuer" Wert/Nutzen statt Preisverhandlung; bei "keine Zeit" konkrete Entlastung statt langer Diskussion).
+- Jede Antwort: 2\u20134 S\xE4tze, Sie-Form, so dass der Agent sie 1:1 sagen kann. Keine vagen Floskeln.
+- Vermeide: \u201ERabatt\u201C, \u201EPreis senken\u201C, \u201Eich rechne das durch\u201C, \u201EROI in X Monaten\u201C, \u201ETermin\u201C, \u201EMeeting\u201C, \u201EKalender\u201C. Stattdessen: Nutzen klar machen, qualifizierende R\xFCckfrage, kurze Einordnung/Abgleich.
 
 Beispiele f\xFCr die Art der Formulierung (nur Stil, Inhalt kommt aus den USPs):
-- Einwand "Das ist mir zu teuer" \u2192 Antwort z.B.: "Verstehe ich. Wenn Sie die monatliche Ersparnis durch [konkret aus USP] gegen\xFCber Ihrer jetzigen L\xF6sung rechnen, tr\xE4gt sich das oft in X Monaten. Soll ich das kurz durchrechnen?"
-- Einwand "Ich habe keine Zeit" \u2192 Antwort z.B.: "Darum geht es ja genau: Mit [L\xF6sung aus USP] sparen Sie ab dem ersten Tag Zeit, weil [konkret]. Viele Kunden berichten, dass sie nach zwei Wochen bereits X Stunden pro Woche gewinnen."
-- Einwand "Die Konkurrenz ist g\xFCnstiger" \u2192 Antwort z.B.: "Der Unterschied ist [konkreter Nutzen aus USPs], nicht nur der Listenpreis. Bei uns ist [z.B. Support/Updates] inklusive \u2013 da sind andere oft erst im Nachhinein teurer."
-- Einwand "Wir haben das schon anders gel\xF6st" \u2192 Antwort z.B.: "Verstehe ich. Der Vorteil unserer L\xF6sung in dem Fall: [konkret aus USPs gegen\xFCber \xE4lteren Methoden]. Das bringt Ihnen [messbarer Nutzen], ohne dass Sie alles umwerfen m\xFCssen."`;
+- Einwand "Das ist mir zu teuer" \u2192 Antwort z.B.: "Verstanden. Entscheidend ist, dass Sie mit [konkreter USP] messbar [Nutzen] erreichen \u2013 genau daf\xFCr nutzen es viele Kunden. Darf ich kurz fragen, was Ihnen in der Entscheidung am wichtigsten ist: Preis, Ergebnis oder Aufwand?"
+- Einwand "Ich habe keine Zeit" \u2192 Antwort z.B.: "Genau darum geht es: Mit [L\xF6sung/USP] sparen Sie im Alltag Zeit, weil [konkret]. Ich mache es ganz kurz \u2013 woran w\xFCrden Sie sofort merken, dass sich das f\xFCr Sie lohnt?"
+- Einwand "Die Konkurrenz ist g\xFCnstiger" \u2192 Antwort z.B.: "Kann sein. Der Unterschied liegt im Ergebnis: [konkreter Nutzen/USP], nicht nur im Preis. Was ist f\xFCr Sie der wichtigste Vergleichspunkt \u2013 Kosten, Qualit\xE4t oder Risiko?"
+- Einwand "Wir haben das schon anders gel\xF6st" \u2192 Antwort z.B.: "Verstehe ich. Dann ist spannend, ob Sie mit [USP gegen\xFCber \xE4lteren Methoden] noch [konkreten Nutzen] zus\xE4tzlich rausholen. Was funktioniert an Ihrer aktuellen L\xF6sung gut \u2013 und was nervt Sie noch?"`;
   const userPrompt = `Gegeben sind folgende USPs eines Unternehmens (aus einer Website extrahiert):
 
 ${uspsText}
@@ -34984,7 +35069,7 @@ Mindestens 5, maximal 8 Eintr\xE4ge. Gib NUR das JSON zur\xFCck, ohne Erkl\xE4ru
   const objections = (Array.isArray(list) ? list : []).slice(0, 8).filter((o) => o && (o.title || o.response)).map((o) => ({ title: o.title || "Einwand", response: o.response || "" }));
   return objections;
 }
-var import_dotenv, import_path, import_url, import_crypto, import_promises, import_express, import_cors, import_express_session, import_cookie_parser, import_node_fetch, import_meta, __dirname, fetch2, app, PORT, sql, VALID_LEITFADEN_CHAPTER_IDS, FRONTEND_URL, sessionSecret, isNetlify, cookieSessionMiddleware, scenarios, MODULE_TITLES, MODULE_RECOMMENDATIONS, dbInitPromise;
+var import_dotenv, import_path, import_url, import_crypto, import_promises, import_express, import_cors, import_express_session, import_cookie_parser, import_node_fetch, import_meta, __dirname, fetch2, app, PORT, sql, VALID_LEITFADEN_CHAPTER_IDS, FRONTEND_URL, sessionSecret, isNetlify, cookieSessionMiddleware, scenarios, PRACTICE_ACTIVITY_TYPES, MODULE_TITLES, MODULE_RECOMMENDATIONS, dbInitPromise;
 var init_backend = __esm({
   "backend/index.js"() {
     import_dotenv = __toESM(require_main(), 1);
@@ -36280,7 +36365,23 @@ var init_backend = __esm({
           return res.status(401).json({ error: "Nicht angemeldet" });
         }
         if (!sql) {
-          return res.json({ progress: [], trainingActivity: [], totalScenarios: 0 });
+          return res.json({
+            progress: [],
+            trainingActivity: [],
+            practiceActivity: [],
+            practiceActivityCount: 0,
+            totalScenarios: 0,
+            practiceStreak: {
+              streakDays: 0,
+              currentWeekPracticeDays: 0,
+              currentWeekSecured: false,
+              currentWeekStart: null
+            },
+            missions: {
+              challengeDoneThisWeek: false,
+              challengeDaysThisWeek: 0
+            }
+          });
         }
         const progress = await sql`
       SELECT s.id, s.title, s.industry, up.completed, up.score, up.completed_at
@@ -36295,12 +36396,55 @@ var init_backend = __esm({
       WHERE user_id = ${String(userId)}
       ORDER BY completed_at DESC
     `;
+        const practiceActivity = await sql`
+      SELECT activity_type, completed_at
+      FROM user_practice_activity
+      WHERE user_id = ${String(userId)}
+      ORDER BY completed_at DESC
+      LIMIT 80
+    `.catch(() => []);
+        const practiceCountRows = await sql`
+      SELECT COUNT(*)::int AS c
+      FROM user_practice_activity
+      WHERE user_id = ${String(userId)}
+    `.catch(() => [{ c: 0 }]);
+        const practiceActivityCount = practiceCountRows[0]?.c ?? 0;
         const scenarioCount = await sql`SELECT COUNT(*)::int AS c FROM scenarios`.catch(() => [{ c: 0 }]);
         const totalScenarios = scenarioCount[0]?.c ?? 0;
+        const currentWeekStart = getLocalWeekStart(/* @__PURE__ */ new Date());
+        const lookbackDays = 365;
+        const minDate = new Date(currentWeekStart);
+        minDate.setDate(minDate.getDate() - lookbackDays);
+        const practiceDayRows = await sql`
+      SELECT day_date
+      FROM user_practice_days
+      WHERE user_id = ${String(userId)}
+        AND day_date >= ${toLocalDayString(minDate)}
+    `.catch(() => []);
+        const practiceStreak = computePracticeStreak(
+          (practiceDayRows || []).map((r) => r.day_date),
+          /* @__PURE__ */ new Date()
+        );
+        const thisWeekStartKey = toLocalDayString(getLocalWeekStart(/* @__PURE__ */ new Date()));
+        const challengeWeekRows = await sql`
+      SELECT day_date
+      FROM user_practice_events
+      WHERE user_id = ${String(userId)}
+        AND event_type = 'challenge'
+        AND day_date >= ${thisWeekStartKey}
+    `.catch(() => []);
+        const challengeDaysThisWeek = (challengeWeekRows || []).length;
         res.json({
           progress: progress || [],
           trainingActivity: trainingActivity || [],
-          totalScenarios
+          practiceActivity: practiceActivity || [],
+          practiceActivityCount,
+          totalScenarios,
+          practiceStreak,
+          missions: {
+            challengeDoneThisWeek: challengeDaysThisWeek > 0,
+            challengeDaysThisWeek
+          }
         });
       } catch (error) {
         console.error("Error fetching progress:", error);
@@ -36376,6 +36520,77 @@ var init_backend = __esm({
       } catch (error) {
         console.error("Error saving training:", error);
         res.status(500).json({ error: "Failed to save training" });
+      }
+    });
+    app.post("/api/practice/streak/mark", async (req, res) => {
+      try {
+        const userId = req.session?.user?.id;
+        if (!userId) {
+          return res.status(401).json({ error: "Nicht angemeldet" });
+        }
+        if (!sql) {
+          return res.json({ success: true });
+        }
+        const dayDate = toLocalDayString(/* @__PURE__ */ new Date());
+        await sql`
+      INSERT INTO user_practice_days (user_id, day_date)
+      VALUES (${String(userId)}, ${dayDate})
+      ON CONFLICT (user_id, day_date) DO NOTHING
+    `;
+        res.json({ success: true, dayDate });
+      } catch (error) {
+        console.error("Error marking practice streak day:", error);
+        res.status(500).json({ error: "Failed to mark practice streak day" });
+      }
+    });
+    app.post("/api/practice/event", async (req, res) => {
+      try {
+        const userId = req.session?.user?.id;
+        if (!userId) {
+          return res.status(401).json({ error: "Nicht angemeldet" });
+        }
+        const type = String(req.body?.type || "").trim().toLowerCase();
+        const allowed = /* @__PURE__ */ new Set(["challenge"]);
+        if (!allowed.has(type)) {
+          return res.status(400).json({ error: "Ung\xFCltiger Event-Typ" });
+        }
+        if (!sql) {
+          return res.json({ success: true });
+        }
+        const dayDate = toLocalDayString(/* @__PURE__ */ new Date());
+        await sql`
+      INSERT INTO user_practice_events (user_id, event_type, day_date)
+      VALUES (${String(userId)}, ${type}, ${dayDate})
+      ON CONFLICT (user_id, event_type, day_date) DO NOTHING
+    `;
+        res.json({ success: true, type, dayDate });
+      } catch (error) {
+        console.error("Error marking practice event:", error);
+        res.status(500).json({ error: "Failed to mark practice event" });
+      }
+    });
+    PRACTICE_ACTIVITY_TYPES = /* @__PURE__ */ new Set(["quiz", "flashcards", "roleplay", "challenge", "micro-story"]);
+    app.post("/api/practice/activity", async (req, res) => {
+      try {
+        const userId = req.session?.user?.id;
+        if (!userId) {
+          return res.status(401).json({ error: "Nicht angemeldet" });
+        }
+        const activityType = String(req.body?.type || "").trim().toLowerCase();
+        if (!PRACTICE_ACTIVITY_TYPES.has(activityType)) {
+          return res.status(400).json({ error: "Ung\xFCltiger \xDCbungs-Aktivit\xE4tstyp" });
+        }
+        if (!sql) {
+          return res.json({ success: true });
+        }
+        await sql`
+      INSERT INTO user_practice_activity (user_id, activity_type, completed_at)
+      VALUES (${String(userId)}, ${activityType}, ${/* @__PURE__ */ new Date()})
+    `;
+        res.json({ success: true, type: activityType });
+      } catch (error) {
+        console.error("Error logging practice activity:", error);
+        res.status(500).json({ error: "Failed to log practice activity" });
       }
     });
     app.post("/api/insights/answer", async (req, res) => {

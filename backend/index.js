@@ -114,6 +114,31 @@ async function initializeDatabase() {
       )
     `;
 
+    // Übungsmodus: Events (z.B. Challenge abgeschlossen) pro Tag einmalig
+    await sql`
+      CREATE TABLE IF NOT EXISTS user_practice_events (
+        id SERIAL PRIMARY KEY,
+        user_id VARCHAR(255) NOT NULL,
+        event_type VARCHAR(64) NOT NULL,
+        day_date DATE NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(user_id, event_type, day_date)
+      )
+    `;
+
+    // Übungsmodus: jede abgeschlossene Einheit für „Letzte Aktivitäten“ + XP (mehrere pro Tag möglich)
+    await sql`
+      CREATE TABLE IF NOT EXISTS user_practice_activity (
+        id SERIAL PRIMARY KEY,
+        user_id VARCHAR(255) NOT NULL,
+        activity_type VARCHAR(64) NOT NULL,
+        completed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `;
+    try {
+      await sql`CREATE INDEX IF NOT EXISTS idx_user_practice_activity_user_completed ON user_practice_activity (user_id, completed_at DESC)`;
+    } catch (_) {}
+
     await sql`
       CREATE TABLE IF NOT EXISTS user_question_stats (
         id SERIAL PRIMARY KEY,
@@ -1556,12 +1581,18 @@ app.get('/api/progress/me', async (req, res) => {
       return res.json({
         progress: [],
         trainingActivity: [],
+        practiceActivity: [],
+        practiceActivityCount: 0,
         totalScenarios: 0,
         practiceStreak: {
           streakDays: 0,
           currentWeekPracticeDays: 0,
           currentWeekSecured: false,
           currentWeekStart: null,
+        },
+        missions: {
+          challengeDoneThisWeek: false,
+          challengeDaysThisWeek: 0,
         },
       });
     }
@@ -1578,6 +1609,19 @@ app.get('/api/progress/me', async (req, res) => {
       WHERE user_id = ${String(userId)}
       ORDER BY completed_at DESC
     `;
+    const practiceActivity = await sql`
+      SELECT activity_type, completed_at
+      FROM user_practice_activity
+      WHERE user_id = ${String(userId)}
+      ORDER BY completed_at DESC
+      LIMIT 80
+    `.catch(() => []);
+    const practiceCountRows = await sql`
+      SELECT COUNT(*)::int AS c
+      FROM user_practice_activity
+      WHERE user_id = ${String(userId)}
+    `.catch(() => [{ c: 0 }]);
+    const practiceActivityCount = practiceCountRows[0]?.c ?? 0;
     const scenarioCount = await sql`SELECT COUNT(*)::int AS c FROM scenarios`.catch(() => [{ c: 0 }]);
     const totalScenarios = (scenarioCount[0]?.c) ?? 0;
 
@@ -1597,11 +1641,27 @@ app.get('/api/progress/me', async (req, res) => {
       new Date()
     );
 
+    const thisWeekStartKey = toLocalDayString(getLocalWeekStart(new Date()));
+    const challengeWeekRows = await sql`
+      SELECT day_date
+      FROM user_practice_events
+      WHERE user_id = ${String(userId)}
+        AND event_type = 'challenge'
+        AND day_date >= ${thisWeekStartKey}
+    `.catch(() => []);
+    const challengeDaysThisWeek = (challengeWeekRows || []).length;
+
     res.json({
       progress: progress || [],
       trainingActivity: trainingActivity || [],
+      practiceActivity: practiceActivity || [],
+      practiceActivityCount,
       totalScenarios,
       practiceStreak,
+      missions: {
+        challengeDoneThisWeek: challengeDaysThisWeek > 0,
+        challengeDaysThisWeek,
+      },
     });
   } catch (error) {
     console.error('Error fetching progress:', error);
@@ -1709,6 +1769,59 @@ app.post('/api/practice/streak/mark', async (req, res) => {
   } catch (error) {
     console.error('Error marking practice streak day:', error);
     res.status(500).json({ error: 'Failed to mark practice streak day' });
+  }
+});
+
+app.post('/api/practice/event', async (req, res) => {
+  try {
+    const userId = req.session?.user?.id;
+    if (!userId) {
+      return res.status(401).json({ error: 'Nicht angemeldet' });
+    }
+    const type = String(req.body?.type || '').trim().toLowerCase();
+    const allowed = new Set(['challenge']);
+    if (!allowed.has(type)) {
+      return res.status(400).json({ error: 'Ungültiger Event-Typ' });
+    }
+    if (!sql) {
+      return res.json({ success: true });
+    }
+    const dayDate = toLocalDayString(new Date());
+    await sql`
+      INSERT INTO user_practice_events (user_id, event_type, day_date)
+      VALUES (${String(userId)}, ${type}, ${dayDate})
+      ON CONFLICT (user_id, event_type, day_date) DO NOTHING
+    `;
+    res.json({ success: true, type, dayDate });
+  } catch (error) {
+    console.error('Error marking practice event:', error);
+    res.status(500).json({ error: 'Failed to mark practice event' });
+  }
+});
+
+const PRACTICE_ACTIVITY_TYPES = new Set(['quiz', 'flashcards', 'roleplay', 'challenge', 'micro-story']);
+
+app.post('/api/practice/activity', async (req, res) => {
+  try {
+    const userId = req.session?.user?.id;
+    if (!userId) {
+      return res.status(401).json({ error: 'Nicht angemeldet' });
+    }
+    const activityType = String(req.body?.type || '').trim().toLowerCase();
+    if (!PRACTICE_ACTIVITY_TYPES.has(activityType)) {
+      return res.status(400).json({ error: 'Ungültiger Übungs-Aktivitätstyp' });
+    }
+    if (!sql) {
+      return res.json({ success: true });
+    }
+    await sql`
+      INSERT INTO user_practice_activity (user_id, activity_type, completed_at)
+      VALUES (${String(userId)}, ${activityType}, ${new Date()})
+    `;
+    res.json({ success: true, type: activityType });
+  } catch (error) {
+    console.error('Error logging practice activity:', error);
+    res.status(500).json({ error: 'Failed to log practice activity' });
   }
 });
 
@@ -2620,14 +2733,17 @@ async function generateObjectionResponses(usps) {
 
 WICHTIG:
 - Die ANTWORTEN sind zum direkten Vorlesen im Verkaufsgespräch gedacht. Formuliere sie gesprochen, konkret und zur jeweiligen Einwand-Situation passend.
-- Du DARFST die USPs interpretieren und situationsbezogen zuspitzen – die Antwort muss NICHT wörtlich vom Website-Text stammen, sondern perfekt zum Einwand passen (z.B. bei "zu teuer" eine echte Preis-/ROI-Antwort, bei "keine Zeit" eine echte Zeitersparnis-Formulierung).
-- Jede Antwort: 2–4 Sätze, Du- bzw. Sie-Form, so dass der Verkäufer sie 1:1 sagen kann. Keine vagen Floskeln.
+- Kontext: Das sind Leitfäden für Call-Center-Agenten. Sie haben i.d.R. KEINE Preisverhandlungsmacht und rechnen keine individuellen ROI-/Preis-Szenarien live durch.
+- Ziel: Einwände entkräften, Nutzen schmackhaft machen, Gespräch offen halten. Nenne keinen Termin aktiv; bleibe allgemein („weiteres Vorgehen“, „kurz prüfen“, „Details klären“), ohne Meeting-/Termin-Wording.
+- Du DARFST die USPs interpretieren und situationsbezogen zuspitzen – die Antwort muss NICHT wörtlich vom Website-Text stammen, sondern perfekt zum Einwand passen (z.B. bei "zu teuer" Wert/Nutzen statt Preisverhandlung; bei "keine Zeit" konkrete Entlastung statt langer Diskussion).
+- Jede Antwort: 2–4 Sätze, Sie-Form, so dass der Agent sie 1:1 sagen kann. Keine vagen Floskeln.
+- Vermeide: „Rabatt“, „Preis senken“, „ich rechne das durch“, „ROI in X Monaten“, „Termin“, „Meeting“, „Kalender“. Stattdessen: Nutzen klar machen, qualifizierende Rückfrage, kurze Einordnung/Abgleich.
 
 Beispiele für die Art der Formulierung (nur Stil, Inhalt kommt aus den USPs):
-- Einwand "Das ist mir zu teuer" → Antwort z.B.: "Verstehe ich. Wenn Sie die monatliche Ersparnis durch [konkret aus USP] gegenüber Ihrer jetzigen Lösung rechnen, trägt sich das oft in X Monaten. Soll ich das kurz durchrechnen?"
-- Einwand "Ich habe keine Zeit" → Antwort z.B.: "Darum geht es ja genau: Mit [Lösung aus USP] sparen Sie ab dem ersten Tag Zeit, weil [konkret]. Viele Kunden berichten, dass sie nach zwei Wochen bereits X Stunden pro Woche gewinnen."
-- Einwand "Die Konkurrenz ist günstiger" → Antwort z.B.: "Der Unterschied ist [konkreter Nutzen aus USPs], nicht nur der Listenpreis. Bei uns ist [z.B. Support/Updates] inklusive – da sind andere oft erst im Nachhinein teurer."
-- Einwand "Wir haben das schon anders gelöst" → Antwort z.B.: "Verstehe ich. Der Vorteil unserer Lösung in dem Fall: [konkret aus USPs gegenüber älteren Methoden]. Das bringt Ihnen [messbarer Nutzen], ohne dass Sie alles umwerfen müssen."`;
+- Einwand "Das ist mir zu teuer" → Antwort z.B.: "Verstanden. Entscheidend ist, dass Sie mit [konkreter USP] messbar [Nutzen] erreichen – genau dafür nutzen es viele Kunden. Darf ich kurz fragen, was Ihnen in der Entscheidung am wichtigsten ist: Preis, Ergebnis oder Aufwand?"
+- Einwand "Ich habe keine Zeit" → Antwort z.B.: "Genau darum geht es: Mit [Lösung/USP] sparen Sie im Alltag Zeit, weil [konkret]. Ich mache es ganz kurz – woran würden Sie sofort merken, dass sich das für Sie lohnt?"
+- Einwand "Die Konkurrenz ist günstiger" → Antwort z.B.: "Kann sein. Der Unterschied liegt im Ergebnis: [konkreter Nutzen/USP], nicht nur im Preis. Was ist für Sie der wichtigste Vergleichspunkt – Kosten, Qualität oder Risiko?"
+- Einwand "Wir haben das schon anders gelöst" → Antwort z.B.: "Verstehe ich. Dann ist spannend, ob Sie mit [USP gegenüber älteren Methoden] noch [konkreten Nutzen] zusätzlich rausholen. Was funktioniert an Ihrer aktuellen Lösung gut – und was nervt Sie noch?"`;
 
   const userPrompt = `Gegeben sind folgende USPs eines Unternehmens (aus einer Website extrahiert):
 
