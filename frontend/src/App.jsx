@@ -7232,8 +7232,11 @@ function Progress() {
   }
   const practiceXpTotal = practiceActivityCount * 25
   const totalXP = completedScenarios * 100 + completedTrainings * 50 + practiceXpTotal
-  const level = Math.floor(totalXP / 500) + 1
-  const trainingProgressPct = (completedTrainings / TOTAL_TRAINING_MODULES) * 100
+  const XP_PER_LEVEL = 500
+  const level = Math.floor(totalXP / XP_PER_LEVEL) + 1
+  const xpIntoCurrentLevel = totalXP % XP_PER_LEVEL
+  const xpUntilNextLevel = XP_PER_LEVEL - xpIntoCurrentLevel
+  const levelUpProgressPct = (xpIntoCurrentLevel / XP_PER_LEVEL) * 100
 
   const achievements = [
     { id: 1, name: 'Erste Schritte', description: 'Erstes Training abgeschlossen', earned: completedTrainings >= 1 },
@@ -7269,11 +7272,26 @@ function Progress() {
       </div>
 
       <div className="progress-stats">
-        <div className="stat-card">
-          <div className="stat-icon">🏆</div>
-          <div className="stat-content">
-            <h3>Level {level}</h3>
-            <p>{totalXP} XP</p>
+        <div className="stat-card stat-card-level" aria-label="Level und XP-Fortschritt">
+          <div className="stat-card-level-top">
+            <div className="stat-icon">🏆</div>
+            <div className="stat-content">
+              <h3>Level {level}</h3>
+              <p>{totalXP} XP gesamt</p>
+            </div>
+          </div>
+          <div className="stat-card-level-xp">
+            <div className="stat-card-level-xp-meta">
+              <span className="stat-card-level-xp-remaining">
+                Noch {xpUntilNextLevel} XP bis Level {level + 1}
+              </span>
+              <span className="stat-card-level-xp-fraction">
+                {xpIntoCurrentLevel} / {XP_PER_LEVEL}
+              </span>
+            </div>
+            <div className="progress-bar stat-card-level-progress">
+              <div className="progress-fill" style={{ width: `${levelUpProgressPct}%` }} />
+            </div>
           </div>
         </div>
         <div className="stat-card">
@@ -7293,16 +7311,6 @@ function Progress() {
               {practiceStreak.currentWeekSecured ? ' gesichert' : ''}
             </p>
           </div>
-        </div>
-      </div>
-
-      <div className="progress-sections">
-        <div className="progress-section">
-          <h3>Training-Fortschritt</h3>
-          <div className="progress-bar">
-            <div className="progress-fill" style={{ width: `${trainingProgressPct}%` }}></div>
-          </div>
-          <p>{completedTrainings} von {TOTAL_TRAINING_MODULES} Trainings abgeschlossen</p>
         </div>
       </div>
 

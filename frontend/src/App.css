@@ -1599,6 +1599,49 @@ html[data-theme="light"] .btn:not(:disabled):not([disabled]):not(.btn-primary):n
   color: var(--muted);
 }
 
+.stat-card-level {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 1.1rem;
+}
+
+.stat-card-level-top {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.stat-card-level-xp {
+  width: 100%;
+  padding-top: 0.35rem;
+  border-top: 1px solid var(--border);
+}
+
+.stat-card-level-xp-meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.5rem 1rem;
+  margin-bottom: 0.5rem;
+  font-size: 0.88rem;
+}
+
+.stat-card-level-xp-remaining {
+  color: #81c784;
+  font-weight: 600;
+}
+
+.stat-card-level-xp-fraction {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.stat-card-level-progress {
+  height: 22px;
+  margin-bottom: 0;
+}
+
 .progress-sections {
   margin: 2rem 0;
 }
